@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/site_repository_impl.dart';
-import '../../domain/entities/dive_site.dart';
+import '../../domain/entities/dive_site.dart' as domain;
 
 /// Repository provider
 final siteRepositoryProvider = Provider<SiteRepository>((ref) {
@@ -9,7 +9,7 @@ final siteRepositoryProvider = Provider<SiteRepository>((ref) {
 });
 
 /// All sites provider
-final sitesProvider = FutureProvider<List<DiveSite>>((ref) async {
+final sitesProvider = FutureProvider<List<domain.DiveSite>>((ref) async {
   final repository = ref.watch(siteRepositoryProvider);
   return repository.getAllSites();
 });
@@ -21,13 +21,13 @@ final sitesWithCountsProvider = FutureProvider<List<SiteWithDiveCount>>((ref) as
 });
 
 /// Single site provider
-final siteProvider = FutureProvider.family<DiveSite?, String>((ref, id) async {
+final siteProvider = FutureProvider.family<domain.DiveSite?, String>((ref, id) async {
   final repository = ref.watch(siteRepositoryProvider);
   return repository.getSiteById(id);
 });
 
 /// Site search provider
-final siteSearchProvider = FutureProvider.family<List<DiveSite>, String>((ref, query) async {
+final siteSearchProvider = FutureProvider.family<List<domain.DiveSite>, String>((ref, query) async {
   if (query.isEmpty) {
     return ref.watch(sitesProvider).value ?? [];
   }
@@ -36,7 +36,7 @@ final siteSearchProvider = FutureProvider.family<List<DiveSite>, String>((ref, q
 });
 
 /// Site list notifier for mutations
-class SiteListNotifier extends StateNotifier<AsyncValue<List<DiveSite>>> {
+class SiteListNotifier extends StateNotifier<AsyncValue<List<domain.DiveSite>>> {
   final SiteRepository _repository;
 
   SiteListNotifier(this._repository) : super(const AsyncValue.loading()) {
@@ -57,13 +57,13 @@ class SiteListNotifier extends StateNotifier<AsyncValue<List<DiveSite>>> {
     await _loadSites();
   }
 
-  Future<DiveSite> addSite(DiveSite site) async {
+  Future<domain.DiveSite> addSite(domain.DiveSite site) async {
     final newSite = await _repository.createSite(site);
     await _loadSites();
     return newSite;
   }
 
-  Future<void> updateSite(DiveSite site) async {
+  Future<void> updateSite(domain.DiveSite site) async {
     await _repository.updateSite(site);
     await _loadSites();
   }
@@ -75,7 +75,7 @@ class SiteListNotifier extends StateNotifier<AsyncValue<List<DiveSite>>> {
 }
 
 final siteListNotifierProvider =
-    StateNotifierProvider<SiteListNotifier, AsyncValue<List<DiveSite>>>((ref) {
+    StateNotifierProvider<SiteListNotifier, AsyncValue<List<domain.DiveSite>>>((ref) {
   final repository = ref.watch(siteRepositoryProvider);
   return SiteListNotifier(repository);
 });

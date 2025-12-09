@@ -1,9 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Visibility;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/constants/enums.dart';
+import '../../domain/entities/dive.dart';
+import '../providers/dive_providers.dart';
 
-class DiveEditPage extends StatefulWidget {
+class DiveEditPage extends ConsumerStatefulWidget {
   final String? diveId;
 
   const DiveEditPage({
@@ -14,11 +18,13 @@ class DiveEditPage extends StatefulWidget {
   bool get isEditing => diveId != null;
 
   @override
-  State<DiveEditPage> createState() => _DiveEditPageState();
+  ConsumerState<DiveEditPage> createState() => _DiveEditPageState();
 }
 
-class _DiveEditPageState extends State<DiveEditPage> {
+class _DiveEditPageState extends ConsumerState<DiveEditPage> {
   final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+  bool _isSaving = false;
 
   // Form controllers
   late DateTime _selectedDate;
@@ -42,6 +48,9 @@ class _DiveEditPageState extends State<DiveEditPage> {
   final _endPressureController = TextEditingController(text: '50');
   final _o2PercentController = TextEditingController(text: '21');
 
+  // Existing dive for editing
+  Dive? _existingDive;
+
   @override
   void initState() {
     super.initState();
@@ -49,7 +58,46 @@ class _DiveEditPageState extends State<DiveEditPage> {
     _selectedTime = TimeOfDay.now();
 
     if (widget.isEditing) {
-      // TODO: Load existing dive data
+      _loadExistingDive();
+    }
+  }
+
+  Future<void> _loadExistingDive() async {
+    setState(() => _isLoading = true);
+    try {
+      final repository = ref.read(diveRepositoryProvider);
+      final dive = await repository.getDiveById(widget.diveId!);
+      if (dive != null && mounted) {
+        setState(() {
+          _existingDive = dive;
+          _selectedDate = dive.dateTime;
+          _selectedTime = TimeOfDay.fromDateTime(dive.dateTime);
+          _durationController.text = dive.duration?.inMinutes.toString() ?? '';
+          _maxDepthController.text = dive.maxDepth?.toString() ?? '';
+          _avgDepthController.text = dive.avgDepth?.toString() ?? '';
+          _waterTempController.text = dive.waterTemp?.toString() ?? '';
+          _airTempController.text = dive.airTemp?.toString() ?? '';
+          _buddyController.text = dive.buddy ?? '';
+          _diveMasterController.text = dive.diveMaster ?? '';
+          _notesController.text = dive.notes;
+          _selectedDiveType = dive.diveType;
+          _selectedVisibility = dive.visibility ?? Visibility.unknown;
+          _rating = dive.rating ?? 0;
+
+          // Load tank data if available
+          if (dive.tanks.isNotEmpty) {
+            final tank = dive.tanks.first;
+            _tankVolumeController.text = tank.volume?.toString() ?? '12';
+            _startPressureController.text = tank.startPressure?.toString() ?? '200';
+            _endPressureController.text = tank.endPressure?.toString() ?? '50';
+            _o2PercentController.text = tank.gasMix.o2.toString();
+          }
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -72,14 +120,32 @@ class _DiveEditPageState extends State<DiveEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.isEditing ? 'Edit Dive' : 'Log Dive'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Edit Dive' : 'Log Dive'),
         actions: [
-          TextButton(
-            onPressed: _saveDive,
-            child: const Text('Save'),
-          ),
+          _isSaving
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : TextButton(
+                  onPressed: _saveDive,
+                  child: const Text('Save'),
+                ),
         ],
       ),
       body: Form(
@@ -124,9 +190,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                   child: OutlinedButton.icon(
                     onPressed: _selectDate,
                     icon: const Icon(Icons.calendar_today),
-                    label: Text(
-                      '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                    ),
+                    label: Text(DateFormat('MMM d, y').format(_selectedDate)),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -157,9 +221,15 @@ class _DiveEditPageState extends State<DiveEditPage> {
             OutlinedButton.icon(
               onPressed: () {
                 // TODO: Open site picker
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Site picker coming soon'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
               },
               icon: const Icon(Icons.location_on),
-              label: const Text('Select Dive Site'),
+              label: Text(_existingDive?.site?.name ?? 'Select Dive Site'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 48),
               ),
@@ -188,7 +258,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                       labelText: 'Max Depth',
                       suffixText: 'm',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -199,7 +269,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                       labelText: 'Avg Depth',
                       suffixText: 'm',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
               ],
@@ -237,7 +307,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                       labelText: 'Volume',
                       suffixText: 'L',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -248,7 +318,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                       labelText: 'O2',
                       suffixText: '%',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
               ],
@@ -335,7 +405,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                       labelText: 'Water Temp',
                       suffixText: '°C',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -346,7 +416,7 @@ class _DiveEditPageState extends State<DiveEditPage> {
                       labelText: 'Air Temp',
                       suffixText: '°C',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
               ],
@@ -462,10 +532,109 @@ class _DiveEditPageState extends State<DiveEditPage> {
     }
   }
 
-  void _saveDive() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: Save dive to database
-      context.go('/dives');
+  Future<void> _saveDive() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      // Build the DateTime from date and time
+      final dateTime = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        _selectedTime.hour,
+        _selectedTime.minute,
+      );
+
+      // Parse form values
+      final duration = _durationController.text.isNotEmpty
+          ? Duration(minutes: int.parse(_durationController.text))
+          : null;
+      final maxDepth = _maxDepthController.text.isNotEmpty
+          ? double.parse(_maxDepthController.text)
+          : null;
+      final avgDepth = _avgDepthController.text.isNotEmpty
+          ? double.parse(_avgDepthController.text)
+          : null;
+      final waterTemp = _waterTempController.text.isNotEmpty
+          ? double.parse(_waterTempController.text)
+          : null;
+      final airTemp = _airTempController.text.isNotEmpty
+          ? double.parse(_airTempController.text)
+          : null;
+
+      // Parse tank values
+      final tankVolume = _tankVolumeController.text.isNotEmpty
+          ? double.parse(_tankVolumeController.text)
+          : null;
+      final startPressure = _startPressureController.text.isNotEmpty
+          ? int.parse(_startPressureController.text)
+          : null;
+      final endPressure = _endPressureController.text.isNotEmpty
+          ? int.parse(_endPressureController.text)
+          : null;
+      final o2Percent = _o2PercentController.text.isNotEmpty
+          ? double.parse(_o2PercentController.text)
+          : 21.0;
+
+      // Create tank
+      final tanks = <DiveTank>[];
+      if (tankVolume != null || startPressure != null || endPressure != null) {
+        tanks.add(DiveTank(
+          id: '',
+          volume: tankVolume,
+          startPressure: startPressure,
+          endPressure: endPressure,
+          gasMix: GasMix(o2: o2Percent),
+          order: 0,
+        ));
+      }
+
+      // Create dive entity
+      final dive = Dive(
+        id: widget.diveId ?? '',
+        diveNumber: _existingDive?.diveNumber,
+        dateTime: dateTime,
+        duration: duration,
+        maxDepth: maxDepth,
+        avgDepth: avgDepth,
+        waterTemp: waterTemp,
+        airTemp: airTemp,
+        visibility: _selectedVisibility != Visibility.unknown ? _selectedVisibility : null,
+        diveType: _selectedDiveType,
+        buddy: _buddyController.text.isNotEmpty ? _buddyController.text : null,
+        diveMaster: _diveMasterController.text.isNotEmpty ? _diveMasterController.text : null,
+        notes: _notesController.text,
+        rating: _rating > 0 ? _rating : null,
+        site: _existingDive?.site,
+        tanks: tanks,
+      );
+
+      // Save using the notifier
+      final notifier = ref.read(diveListNotifierProvider.notifier);
+      if (widget.isEditing) {
+        await notifier.updateDive(dive);
+      } else {
+        await notifier.addDive(dive);
+      }
+
+      if (mounted) {
+        context.go('/dives');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving dive: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 }

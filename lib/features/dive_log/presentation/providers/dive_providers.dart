@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/dive_repository_impl.dart';
-import '../../domain/entities/dive.dart';
+import '../../domain/entities/dive.dart' as domain;
 
 /// Repository provider
 final diveRepositoryProvider = Provider<DiveRepository>((ref) {
@@ -9,13 +9,13 @@ final diveRepositoryProvider = Provider<DiveRepository>((ref) {
 });
 
 /// All dives list provider
-final divesProvider = FutureProvider<List<Dive>>((ref) async {
+final divesProvider = FutureProvider<List<domain.Dive>>((ref) async {
   final repository = ref.watch(diveRepositoryProvider);
   return repository.getAllDives();
 });
 
 /// Single dive provider
-final diveProvider = FutureProvider.family<Dive?, String>((ref, id) async {
+final diveProvider = FutureProvider.family<domain.Dive?, String>((ref, id) async {
   final repository = ref.watch(diveRepositoryProvider);
   return repository.getDiveById(id);
 });
@@ -33,7 +33,7 @@ final nextDiveNumberProvider = FutureProvider<int>((ref) async {
 });
 
 /// Search results provider
-final diveSearchProvider = FutureProvider.family<List<Dive>, String>((ref, query) async {
+final diveSearchProvider = FutureProvider.family<List<domain.Dive>, String>((ref, query) async {
   if (query.isEmpty) {
     return ref.watch(divesProvider).value ?? [];
   }
@@ -42,7 +42,7 @@ final diveSearchProvider = FutureProvider.family<List<Dive>, String>((ref, query
 });
 
 /// Dive list notifier for mutations
-class DiveListNotifier extends StateNotifier<AsyncValue<List<Dive>>> {
+class DiveListNotifier extends StateNotifier<AsyncValue<List<domain.Dive>>> {
   final DiveRepository _repository;
   final Ref _ref;
 
@@ -64,14 +64,14 @@ class DiveListNotifier extends StateNotifier<AsyncValue<List<Dive>>> {
     await _loadDives();
   }
 
-  Future<Dive> addDive(Dive dive) async {
+  Future<domain.Dive> addDive(domain.Dive dive) async {
     final newDive = await _repository.createDive(dive);
     await _loadDives();
     _ref.invalidate(diveStatisticsProvider);
     return newDive;
   }
 
-  Future<void> updateDive(Dive dive) async {
+  Future<void> updateDive(domain.Dive dive) async {
     await _repository.updateDive(dive);
     await _loadDives();
     _ref.invalidate(diveStatisticsProvider);
@@ -85,7 +85,7 @@ class DiveListNotifier extends StateNotifier<AsyncValue<List<Dive>>> {
 }
 
 final diveListNotifierProvider =
-    StateNotifierProvider<DiveListNotifier, AsyncValue<List<Dive>>>((ref) {
+    StateNotifierProvider<DiveListNotifier, AsyncValue<List<domain.Dive>>>((ref) {
   final repository = ref.watch(diveRepositoryProvider);
   return DiveListNotifier(repository, ref);
 });

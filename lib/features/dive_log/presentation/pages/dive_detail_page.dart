@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
-class DiveDetailPage extends StatelessWidget {
+import '../../domain/entities/dive.dart';
+import '../providers/dive_providers.dart';
+
+class DiveDetailPage extends ConsumerWidget {
   final String diveId;
 
   const DiveDetailPage({
@@ -10,7 +15,42 @@ class DiveDetailPage extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final diveAsync = ref.watch(diveProvider(diveId));
+
+    return diveAsync.when(
+      data: (dive) {
+        if (dive == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Dive Details')),
+            body: const Center(child: Text('Dive not found')),
+          );
+        }
+        return _buildContent(context, ref, dive);
+      },
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Dive Details')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        appBar: AppBar(title: const Text('Dive Details')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Error loading dive', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(error.toString()),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, WidgetRef ref, Dive dive) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dive Details'),
@@ -23,10 +63,12 @@ class DiveDetailPage extends StatelessWidget {
             onSelected: (value) {
               switch (value) {
                 case 'export':
-                  // TODO: Export dive
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Export coming soon')),
+                  );
                   break;
                 case 'delete':
-                  _showDeleteConfirmation(context);
+                  _showDeleteConfirmation(context, ref);
                   break;
               }
             },
@@ -56,22 +98,27 @@ class DiveDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderSection(context),
+            _buildHeaderSection(context, dive),
             const SizedBox(height: 24),
-            _buildProfilePlaceholder(context),
+            if (dive.profile.isNotEmpty) ...[
+              _buildProfileSection(context, dive),
+              const SizedBox(height: 24),
+            ],
+            _buildDetailsSection(context, dive),
             const SizedBox(height: 24),
-            _buildDetailsSection(context),
-            const SizedBox(height: 24),
-            _buildTanksSection(context),
-            const SizedBox(height: 24),
-            _buildNotesSection(context),
+            if (dive.tanks.isNotEmpty) ...[
+              _buildTanksSection(context, dive),
+              const SizedBox(height: 24),
+            ],
+            _buildNotesSection(context, dive),
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeaderSection(BuildContext context) {
+  Widget _buildHeaderSection(BuildContext context, Dive dive) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -84,7 +131,7 @@ class DiveDetailPage extends StatelessWidget {
                   radius: 24,
                   backgroundColor: Theme.of(context).colorScheme.primaryContainer,
                   child: Text(
-                    '#--',
+                    '#${dive.diveNumber ?? '-'}',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
                       fontWeight: FontWeight.bold,
@@ -97,11 +144,11 @@ class DiveDetailPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Loading...',
+                        dive.site?.name ?? 'Unknown Site',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       Text(
-                        'Date & Time',
+                        DateFormat('EEEE, MMM d, y • h:mm a').format(dive.dateTime),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
@@ -109,15 +156,41 @@ class DiveDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (dive.rating != null)
+                  Row(
+                    children: [
+                      Icon(Icons.star, color: Colors.amber.shade600, size: 20),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${dive.rating}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem(context, Icons.arrow_downward, '--', 'Max Depth'),
-                _buildStatItem(context, Icons.timer, '--', 'Duration'),
-                _buildStatItem(context, Icons.thermostat, '--', 'Temp'),
+                _buildStatItem(
+                  context,
+                  Icons.arrow_downward,
+                  dive.maxDepth != null ? '${dive.maxDepth!.toStringAsFixed(1)}m' : '--',
+                  'Max Depth',
+                ),
+                _buildStatItem(
+                  context,
+                  Icons.timer,
+                  dive.duration != null ? '${dive.duration!.inMinutes} min' : '--',
+                  'Duration',
+                ),
+                _buildStatItem(
+                  context,
+                  Icons.thermostat,
+                  dive.waterTemp != null ? '${dive.waterTemp!.toStringAsFixed(0)}°C' : '--',
+                  'Temp',
+                ),
               ],
             ),
           ],
@@ -142,7 +215,7 @@ class DiveDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildProfilePlaceholder(BuildContext context) {
+  Widget _buildProfileSection(BuildContext context, Dive dive) {
     return Card(
       child: Container(
         height: 200,
@@ -162,7 +235,7 @@ class DiveDetailPage extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               Text(
-                'Profile visualization will appear here',
+                '${dive.profile.length} data points',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -172,7 +245,7 @@ class DiveDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailsSection(BuildContext context) {
+  Widget _buildDetailsSection(BuildContext context, Dive dive) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -184,10 +257,19 @@ class DiveDetailPage extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Divider(),
-            _buildDetailRow(context, 'Dive Type', 'Recreational'),
-            _buildDetailRow(context, 'Visibility', '--'),
-            _buildDetailRow(context, 'Buddy', '--'),
-            _buildDetailRow(context, 'Dive Master', '--'),
+            _buildDetailRow(context, 'Dive Type', dive.diveType.displayName),
+            if (dive.visibility != null)
+              _buildDetailRow(context, 'Visibility', dive.visibility!.displayName),
+            if (dive.avgDepth != null)
+              _buildDetailRow(context, 'Avg Depth', '${dive.avgDepth!.toStringAsFixed(1)}m'),
+            if (dive.airTemp != null)
+              _buildDetailRow(context, 'Air Temp', '${dive.airTemp!.toStringAsFixed(0)}°C'),
+            if (dive.buddy != null && dive.buddy!.isNotEmpty)
+              _buildDetailRow(context, 'Buddy', dive.buddy!),
+            if (dive.diveMaster != null && dive.diveMaster!.isNotEmpty)
+              _buildDetailRow(context, 'Dive Master', dive.diveMaster!),
+            if (dive.sac != null)
+              _buildDetailRow(context, 'SAC Rate', '${dive.sac!.toStringAsFixed(1)} bar/min'),
           ],
         ),
       ),
@@ -212,7 +294,7 @@ class DiveDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTanksSection(BuildContext context) {
+  Widget _buildTanksSection(BuildContext context, Dive dive) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -224,20 +306,23 @@ class DiveDetailPage extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Divider(),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.propane_tank),
-              title: const Text('Air'),
-              subtitle: const Text('-- bar -> -- bar'),
-              trailing: const Text('-- L'),
-            ),
+            ...dive.tanks.map((tank) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.propane_tank),
+                  title: Text(tank.gasMix.name),
+                  subtitle: Text(
+                    '${tank.startPressure ?? '--'} bar → ${tank.endPressure ?? '--'} bar'
+                    '${tank.pressureUsed != null ? ' (${tank.pressureUsed} bar used)' : ''}',
+                  ),
+                  trailing: tank.volume != null ? Text('${tank.volume!.toStringAsFixed(0)} L') : null,
+                )),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNotesSection(BuildContext context) {
+  Widget _buildNotesSection(BuildContext context, Dive dive) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -250,10 +335,12 @@ class DiveDetailPage extends StatelessWidget {
             ),
             const Divider(),
             Text(
-              'No notes for this dive.',
+              dive.notes.isNotEmpty ? dive.notes : 'No notes for this dive.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontStyle: FontStyle.italic,
+                    color: dive.notes.isEmpty
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : null,
+                    fontStyle: dive.notes.isEmpty ? FontStyle.italic : null,
                   ),
             ),
           ],
@@ -262,24 +349,26 @@ class DiveDetailPage extends StatelessWidget {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context) {
+  void _showDeleteConfirmation(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Dive?'),
         content: const Text(
           'This action cannot be undone. Are you sure you want to delete this dive?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              context.go('/dives');
-              // TODO: Delete dive
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await ref.read(diveListNotifierProvider.notifier).deleteDive(diveId);
+              if (context.mounted) {
+                context.go('/dives');
+              }
             },
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,

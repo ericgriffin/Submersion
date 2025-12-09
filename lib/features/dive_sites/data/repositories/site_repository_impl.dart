@@ -3,14 +3,14 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/database.dart';
 import '../../../../core/services/database_service.dart';
-import '../../domain/entities/dive_site.dart';
+import '../../domain/entities/dive_site.dart' as domain;
 
 class SiteRepository {
   final AppDatabase _db = DatabaseService.instance.database;
   final _uuid = const Uuid();
 
   /// Get all sites ordered by name
-  Future<List<DiveSite>> getAllSites() async {
+  Future<List<domain.DiveSite>> getAllSites() async {
     final query = _db.select(_db.diveSites)
       ..orderBy([(t) => OrderingTerm.asc(t.name)]);
 
@@ -19,7 +19,7 @@ class SiteRepository {
   }
 
   /// Get a single site by ID
-  Future<DiveSite?> getSiteById(String id) async {
+  Future<domain.DiveSite?> getSiteById(String id) async {
     final query = _db.select(_db.diveSites)
       ..where((t) => t.id.equals(id));
 
@@ -28,7 +28,7 @@ class SiteRepository {
   }
 
   /// Create a new site
-  Future<DiveSite> createSite(DiveSite site) async {
+  Future<domain.DiveSite> createSite(domain.DiveSite site) async {
     final id = site.id.isEmpty ? _uuid.v4() : site.id;
     final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -51,7 +51,7 @@ class SiteRepository {
   }
 
   /// Update an existing site
-  Future<void> updateSite(DiveSite site) async {
+  Future<void> updateSite(domain.DiveSite site) async {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await (_db.update(_db.diveSites)..where((t) => t.id.equals(site.id))).write(
@@ -76,7 +76,7 @@ class SiteRepository {
   }
 
   /// Search sites by name or location
-  Future<List<DiveSite>> searchSites(String query) async {
+  Future<List<domain.DiveSite>> searchSites(String query) async {
     final searchQuery = _db.select(_db.diveSites)
       ..where((t) =>
           t.name.contains(query) |
@@ -115,13 +115,13 @@ class SiteRepository {
       ..sort((a, b) => b.diveCount.compareTo(a.diveCount));
   }
 
-  DiveSite _mapRowToSite(DiveSiteData row) {
-    return DiveSite(
+  domain.DiveSite _mapRowToSite(DiveSite row) {
+    return domain.DiveSite(
       id: row.id,
       name: row.name,
       description: row.description,
       location: row.latitude != null && row.longitude != null
-          ? GeoPoint(row.latitude!, row.longitude!)
+          ? domain.GeoPoint(row.latitude!, row.longitude!)
           : null,
       maxDepth: row.maxDepth,
       country: row.country,
@@ -133,7 +133,7 @@ class SiteRepository {
 }
 
 class SiteWithDiveCount {
-  final DiveSite site;
+  final domain.DiveSite site;
   final int diveCount;
 
   SiteWithDiveCount({required this.site, required this.diveCount});

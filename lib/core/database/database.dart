@@ -10,7 +10,7 @@ part 'database.g.dart';
 class Dives extends Table {
   TextColumn get id => text()();
   IntColumn get diveNumber => integer().nullable()();
-  IntColumn get dateTime => integer()(); // Unix timestamp
+  IntColumn get diveDateTime => integer()(); // Unix timestamp
   IntColumn get duration => integer().nullable()(); // seconds
   RealColumn get maxDepth => real().nullable()();
   RealColumn get avgDepth => real().nullable()();

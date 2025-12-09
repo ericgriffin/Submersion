@@ -1,33 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class StatisticsPage extends StatelessWidget {
+import '../../../dive_log/data/repositories/dive_repository_impl.dart';
+import '../../../dive_log/presentation/providers/dive_providers.dart';
+
+class StatisticsPage extends ConsumerWidget {
   const StatisticsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(diveStatisticsProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Statistics'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.invalidate(diveStatisticsProvider),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildOverviewCards(context),
-            const SizedBox(height: 24),
-            _buildDivesByMonthChart(context),
-            const SizedBox(height: 24),
-            _buildDepthDistribution(context),
-            const SizedBox(height: 24),
-            _buildTopSites(context),
-          ],
+      body: statsAsync.when(
+        data: (stats) => _buildContent(context, stats),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Error loading statistics'),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => ref.invalidate(diveStatisticsProvider),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildOverviewCards(BuildContext context) {
+  Widget _buildContent(BuildContext context, DiveStatistics stats) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildOverviewCards(context, stats),
+          const SizedBox(height: 24),
+          _buildDivesByMonthChart(context, stats),
+          const SizedBox(height: 24),
+          _buildDepthDistribution(context, stats),
+          const SizedBox(height: 24),
+          _buildTopSites(context, stats),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewCards(BuildContext context, DiveStatistics stats) {
     return GridView.count(
       crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
       shrinkWrap: true,
@@ -40,28 +74,28 @@ class StatisticsPage extends StatelessWidget {
           context,
           icon: Icons.waves,
           label: 'Total Dives',
-          value: '0',
+          value: '${stats.totalDives}',
           color: Theme.of(context).colorScheme.primary,
         ),
         _buildStatCard(
           context,
           icon: Icons.timer,
           label: 'Total Time',
-          value: '0h',
+          value: stats.totalTimeFormatted,
           color: Theme.of(context).colorScheme.secondary,
         ),
         _buildStatCard(
           context,
           icon: Icons.arrow_downward,
           label: 'Max Depth',
-          value: '0m',
+          value: stats.maxDepth > 0 ? '${stats.maxDepth.toStringAsFixed(1)}m' : '--',
           color: Theme.of(context).colorScheme.tertiary,
         ),
         _buildStatCard(
           context,
           icon: Icons.location_on,
           label: 'Sites Visited',
-          value: '0',
+          value: '${stats.totalSites}',
           color: Theme.of(context).colorScheme.error,
         ),
       ],
@@ -102,7 +136,7 @@ class StatisticsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDivesByMonthChart(BuildContext context) {
+  Widget _buildDivesByMonthChart(BuildContext context, DiveStatistics stats) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -117,23 +151,41 @@ class StatisticsPage extends StatelessWidget {
             Container(
               height: 200,
               alignment: Alignment.center,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.bar_chart,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Chart will appear when you log dives',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+              child: stats.totalDives > 0
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.bar_chart,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
                         ),
-                  ),
-                ],
-              ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Chart visualization coming soon',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.bar_chart,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Chart will appear when you log dives',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -141,7 +193,7 @@ class StatisticsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDepthDistribution(BuildContext context) {
+  Widget _buildDepthDistribution(BuildContext context, DiveStatistics stats) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -156,23 +208,46 @@ class StatisticsPage extends StatelessWidget {
             Container(
               height: 200,
               alignment: Alignment.center,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.pie_chart,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Chart will appear when you log dives',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+              child: stats.totalDives > 0
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.pie_chart,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
                         ),
-                  ),
-                ],
-              ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Avg Max Depth: ${stats.avgMaxDepth.toStringAsFixed(1)}m',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        if (stats.avgTemperature != null)
+                          Text(
+                            'Avg Water Temp: ${stats.avgTemperature!.toStringAsFixed(1)}°C',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.pie_chart,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Chart will appear when you log dives',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -180,7 +255,7 @@ class StatisticsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTopSites(BuildContext context) {
+  Widget _buildTopSites(BuildContext context, DiveStatistics stats) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -204,7 +279,9 @@ class StatisticsPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'No dive sites yet',
+                      stats.totalSites > 0
+                          ? '${stats.totalSites} sites visited'
+                          : 'No dive sites yet',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),

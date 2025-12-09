@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
-class DiveListPage extends StatelessWidget {
+import '../../domain/entities/dive.dart';
+import '../providers/dive_providers.dart';
+
+class DiveListPage extends ConsumerWidget {
   const DiveListPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final divesAsync = ref.watch(diveListNotifierProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dive Log'),
@@ -24,11 +31,71 @@ class DiveListPage extends StatelessWidget {
           ),
         ],
       ),
-      body: _buildEmptyState(context),
+      body: divesAsync.when(
+        data: (dives) => dives.isEmpty
+            ? _buildEmptyState(context)
+            : _buildDiveList(context, ref, dives),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading dives',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () =>
+                      ref.read(diveListNotifierProvider.notifier).refresh(),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.go('/dives/new'),
         icon: const Icon(Icons.add),
         label: const Text('Log Dive'),
+      ),
+    );
+  }
+
+  Widget _buildDiveList(BuildContext context, WidgetRef ref, List<Dive> dives) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(diveListNotifierProvider.notifier).refresh(),
+      child: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 80),
+        itemCount: dives.length,
+        itemBuilder: (context, index) {
+          final dive = dives[index];
+          return DiveListTile(
+            diveNumber: dive.diveNumber ?? index + 1,
+            dateTime: dive.dateTime,
+            siteName: dive.site?.name,
+            maxDepth: dive.maxDepth,
+            duration: dive.duration,
+            rating: dive.rating,
+            onTap: () => context.go('/dives/${dive.id}'),
+          );
+        },
       ),
     );
   }
@@ -74,6 +141,7 @@ class DiveListTile extends StatelessWidget {
   final String? siteName;
   final double? maxDepth;
   final Duration? duration;
+  final int? rating;
   final VoidCallback? onTap;
 
   const DiveListTile({
@@ -83,6 +151,7 @@ class DiveListTile extends StatelessWidget {
     this.siteName,
     this.maxDepth,
     this.duration,
+    this.rating,
     this.onTap,
   });
 
@@ -104,7 +173,23 @@ class DiveListTile extends StatelessWidget {
           ),
         ),
         title: Text(siteName ?? 'Unknown Site'),
-        subtitle: Text(_formatDate(dateTime)),
+        subtitle: Row(
+          children: [
+            Text(_formatDate(dateTime)),
+            if (rating != null) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.star,
+                size: 14,
+                color: Colors.amber.shade600,
+              ),
+              Text(
+                ' $rating',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -126,7 +211,7 @@ class DiveListTile extends StatelessWidget {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    return DateFormat('MMM d, y').format(date);
   }
 
   String _formatDuration(Duration duration) {

@@ -1,10 +1,11 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/constants/enums.dart';
 import '../../../../core/database/database.dart';
 import '../../../../core/services/database_service.dart';
-import '../../domain/entities/dive.dart';
-import '../../../dive_sites/domain/entities/dive_site.dart';
+import '../../domain/entities/dive.dart' as domain;
+import '../../../dive_sites/domain/entities/dive_site.dart' as domain;
 
 class DiveRepository {
   final AppDatabase _db = DatabaseService.instance.database;
@@ -15,16 +16,16 @@ class DiveRepository {
   // ============================================================================
 
   /// Get all dives, ordered by date (newest first)
-  Future<List<Dive>> getAllDives() async {
+  Future<List<domain.Dive>> getAllDives() async {
     final query = _db.select(_db.dives)
-      ..orderBy([(t) => OrderingTerm.desc(t.dateTime)]);
+      ..orderBy([(t) => OrderingTerm.desc(t.diveDateTime)]);
 
     final rows = await query.get();
     return Future.wait(rows.map(_mapRowToDive));
   }
 
   /// Get a single dive by ID
-  Future<Dive?> getDiveById(String id) async {
+  Future<domain.Dive?> getDiveById(String id) async {
     final query = _db.select(_db.dives)
       ..where((t) => t.id.equals(id));
 
@@ -35,14 +36,14 @@ class DiveRepository {
   }
 
   /// Create a new dive
-  Future<Dive> createDive(Dive dive) async {
+  Future<domain.Dive> createDive(domain.Dive dive) async {
     final id = dive.id.isEmpty ? _uuid.v4() : dive.id;
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await _db.into(_db.dives).insert(DivesCompanion(
       id: Value(id),
       diveNumber: Value(dive.diveNumber),
-      dateTime: Value(dive.dateTime.millisecondsSinceEpoch),
+      diveDateTime: Value(dive.dateTime.millisecondsSinceEpoch),
       duration: Value(dive.duration?.inSeconds),
       maxDepth: Value(dive.maxDepth),
       avgDepth: Value(dive.avgDepth),
@@ -90,13 +91,13 @@ class DiveRepository {
   }
 
   /// Update an existing dive
-  Future<void> updateDive(Dive dive) async {
+  Future<void> updateDive(domain.Dive dive) async {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await (_db.update(_db.dives)..where((t) => t.id.equals(dive.id))).write(
       DivesCompanion(
         diveNumber: Value(dive.diveNumber),
-        dateTime: Value(dive.dateTime.millisecondsSinceEpoch),
+        diveDateTime: Value(dive.dateTime.millisecondsSinceEpoch),
         duration: Value(dive.duration?.inSeconds),
         maxDepth: Value(dive.maxDepth),
         avgDepth: Value(dive.avgDepth),
@@ -139,21 +140,21 @@ class DiveRepository {
   // ============================================================================
 
   /// Get dives for a specific site
-  Future<List<Dive>> getDivesForSite(String siteId) async {
+  Future<List<domain.Dive>> getDivesForSite(String siteId) async {
     final query = _db.select(_db.dives)
       ..where((t) => t.siteId.equals(siteId))
-      ..orderBy([(t) => OrderingTerm.desc(t.dateTime)]);
+      ..orderBy([(t) => OrderingTerm.desc(t.diveDateTime)]);
 
     final rows = await query.get();
     return Future.wait(rows.map(_mapRowToDive));
   }
 
   /// Get dives within a date range
-  Future<List<Dive>> getDivesInRange(DateTime start, DateTime end) async {
+  Future<List<domain.Dive>> getDivesInRange(DateTime start, DateTime end) async {
     final query = _db.select(_db.dives)
-      ..where((t) => t.dateTime.isBiggerOrEqualValue(start.millisecondsSinceEpoch))
-      ..where((t) => t.dateTime.isSmallerOrEqualValue(end.millisecondsSinceEpoch))
-      ..orderBy([(t) => OrderingTerm.desc(t.dateTime)]);
+      ..where((t) => t.diveDateTime.isBiggerOrEqualValue(start.millisecondsSinceEpoch))
+      ..where((t) => t.diveDateTime.isSmallerOrEqualValue(end.millisecondsSinceEpoch))
+      ..orderBy([(t) => OrderingTerm.desc(t.diveDateTime)]);
 
     final rows = await query.get();
     return Future.wait(rows.map(_mapRowToDive));
@@ -170,13 +171,13 @@ class DiveRepository {
   }
 
   /// Search dives by notes or buddy name
-  Future<List<Dive>> searchDives(String query) async {
+  Future<List<domain.Dive>> searchDives(String query) async {
     final searchQuery = _db.select(_db.dives)
       ..where((t) =>
           t.notes.contains(query) |
           t.buddy.contains(query) |
           t.diveMaster.contains(query))
-      ..orderBy([(t) => OrderingTerm.desc(t.dateTime)]);
+      ..orderBy([(t) => OrderingTerm.desc(t.diveDateTime)]);
 
     final rows = await searchQuery.get();
     return Future.wait(rows.map(_mapRowToDive));
@@ -212,7 +213,7 @@ class DiveRepository {
   // Mapping Helpers
   // ============================================================================
 
-  Future<Dive> _mapRowToDive(DiveData row) async {
+  Future<domain.Dive> _mapRowToDive(Dive row) async {
     // Get tanks for this dive
     final tanksQuery = _db.select(_db.diveTanks)
       ..where((t) => t.diveId.equals(row.id))
@@ -226,18 +227,18 @@ class DiveRepository {
     final profileRows = await profileQuery.get();
 
     // Get site if exists
-    DiveSite? site;
+    domain.DiveSite? site;
     if (row.siteId != null) {
       final siteQuery = _db.select(_db.diveSites)
         ..where((t) => t.id.equals(row.siteId!));
       final siteRow = await siteQuery.getSingleOrNull();
       if (siteRow != null) {
-        site = DiveSite(
+        site = domain.DiveSite(
           id: siteRow.id,
           name: siteRow.name,
           description: siteRow.description,
           location: siteRow.latitude != null && siteRow.longitude != null
-              ? GeoPoint(siteRow.latitude!, siteRow.longitude!)
+              ? domain.GeoPoint(siteRow.latitude!, siteRow.longitude!)
               : null,
           maxDepth: siteRow.maxDepth,
           country: siteRow.country,
@@ -248,10 +249,10 @@ class DiveRepository {
       }
     }
 
-    return Dive(
+    return domain.Dive(
       id: row.id,
       diveNumber: row.diveNumber,
-      dateTime: DateTime.fromMillisecondsSinceEpoch(row.dateTime),
+      dateTime: DateTime.fromMillisecondsSinceEpoch(row.diveDateTime),
       duration: row.duration != null ? Duration(seconds: row.duration!) : null,
       maxDepth: row.maxDepth,
       avgDepth: row.avgDepth,
@@ -272,15 +273,15 @@ class DiveRepository {
       notes: row.notes,
       site: site,
       rating: row.rating,
-      tanks: tankRows.map((t) => DiveTank(
+      tanks: tankRows.map((t) => domain.DiveTank(
         id: t.id,
         volume: t.volume,
         startPressure: t.startPressure,
         endPressure: t.endPressure,
-        gasMix: GasMix(o2: t.o2Percent, he: t.hePercent),
+        gasMix: domain.GasMix(o2: t.o2Percent, he: t.hePercent),
         order: t.tankOrder,
       )).toList(),
-      profile: profileRows.map((p) => DiveProfilePoint(
+      profile: profileRows.map((p) => domain.DiveProfilePoint(
         timestamp: p.timestamp,
         depth: p.depth,
         pressure: p.pressure,
