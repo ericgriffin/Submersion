@@ -38,6 +38,15 @@ final serviceDueGearProvider = FutureProvider<List<GearItem>>((ref) async {
   return repository.getGearWithServiceDue();
 });
 
+/// Gear search provider
+final gearSearchProvider = FutureProvider.family<List<GearItem>, String>((ref, query) async {
+  if (query.isEmpty) {
+    return ref.watch(allGearProvider).value ?? [];
+  }
+  final repository = ref.watch(gearRepositoryProvider);
+  return repository.searchGear(query);
+});
+
 /// Gear list notifier for mutations
 class GearListNotifier extends StateNotifier<AsyncValue<List<GearItem>>> {
   final GearRepository _repository;

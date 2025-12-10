@@ -137,6 +137,48 @@ class GearRepository {
     return allGear.where((g) => g.isServiceDue).toList();
   }
 
+  /// Search gear by name, brand, model, or serial number
+  Future<List<GearItem>> searchGear(String query) async {
+    final searchTerm = '%${query.toLowerCase()}%';
+
+    final results = await _db.customSelect('''
+      SELECT * FROM gear
+      WHERE LOWER(name) LIKE ?
+         OR LOWER(brand) LIKE ?
+         OR LOWER(model) LIKE ?
+         OR LOWER(serial_number) LIKE ?
+      ORDER BY is_active DESC, type ASC, name ASC
+    ''', variables: [
+      Variable.withString(searchTerm),
+      Variable.withString(searchTerm),
+      Variable.withString(searchTerm),
+      Variable.withString(searchTerm),
+    ]).get();
+
+    return results.map((row) {
+      return GearItem(
+        id: row.data['id'] as String,
+        name: row.data['name'] as String,
+        type: GearType.values.firstWhere(
+          (t) => t.name == row.data['type'],
+          orElse: () => GearType.other,
+        ),
+        brand: row.data['brand'] as String?,
+        model: row.data['model'] as String?,
+        serialNumber: row.data['serial_number'] as String?,
+        purchaseDate: row.data['purchase_date'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(row.data['purchase_date'] as int)
+            : null,
+        lastServiceDate: row.data['last_service_date'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(row.data['last_service_date'] as int)
+            : null,
+        serviceIntervalDays: row.data['service_interval_days'] as int?,
+        notes: (row.data['notes'] as String?) ?? '',
+        isActive: row.data['is_active'] == 1,
+      );
+    }).toList();
+  }
+
   /// Get dive count for gear item
   Future<int> getDiveCountForGear(String gearId) async {
     final result = await _db.customSelect('''

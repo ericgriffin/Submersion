@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/constants/enums.dart';
+import '../../../dive_sites/presentation/providers/site_providers.dart';
 import '../../domain/entities/dive.dart';
 import '../providers/dive_providers.dart';
 
@@ -11,7 +13,8 @@ class DiveListPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final divesAsync = ref.watch(diveListNotifierProvider);
+    final divesAsync = ref.watch(filteredDivesProvider);
+    final filter = ref.watch(diveFilterProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -20,21 +23,31 @@ class DiveListPage extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              // TODO: Implement search
+              showSearch(
+                context: context,
+                delegate: DiveSearchDelegate(ref),
+              );
             },
           ),
           IconButton(
-            icon: const Icon(Icons.filter_list),
+            icon: Badge(
+              isLabelVisible: filter.hasActiveFilters,
+              child: const Icon(Icons.filter_list),
+            ),
             onPressed: () {
-              // TODO: Implement filter
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) => DiveFilterSheet(ref: ref),
+              );
             },
           ),
         ],
       ),
       body: divesAsync.when(
         data: (dives) => dives.isEmpty
-            ? _buildEmptyState(context)
-            : _buildDiveList(context, ref, dives),
+            ? _buildEmptyState(context, ref, filter.hasActiveFilters)
+            : _buildDiveList(context, ref, dives, filter.hasActiveFilters),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(
           child: Padding(
@@ -78,29 +91,157 @@ class DiveListPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildDiveList(BuildContext context, WidgetRef ref, List<Dive> dives) {
+  Widget _buildDiveList(BuildContext context, WidgetRef ref, List<Dive> dives, bool hasActiveFilters) {
     return RefreshIndicator(
       onRefresh: () => ref.read(diveListNotifierProvider.notifier).refresh(),
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 80),
-        itemCount: dives.length,
-        itemBuilder: (context, index) {
-          final dive = dives[index];
-          return DiveListTile(
-            diveNumber: dive.diveNumber ?? index + 1,
-            dateTime: dive.dateTime,
-            siteName: dive.site?.name,
-            maxDepth: dive.maxDepth,
-            duration: dive.duration,
-            rating: dive.rating,
-            onTap: () => context.go('/dives/${dive.id}'),
-          );
-        },
+      child: Column(
+        children: [
+          if (hasActiveFilters)
+            _buildActiveFiltersBar(context, ref),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 80),
+              itemCount: dives.length,
+              itemBuilder: (context, index) {
+                final dive = dives[index];
+                return DiveListTile(
+                  diveNumber: dive.diveNumber ?? index + 1,
+                  dateTime: dive.dateTime,
+                  siteName: dive.site?.name,
+                  maxDepth: dive.maxDepth,
+                  duration: dive.duration,
+                  rating: dive.rating,
+                  onTap: () => context.go('/dives/${dive.id}'),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildActiveFiltersBar(BuildContext context, WidgetRef ref) {
+    final filter = ref.watch(diveFilterProvider);
+    final chips = <Widget>[];
+
+    if (filter.startDate != null || filter.endDate != null) {
+      String dateText;
+      if (filter.startDate != null && filter.endDate != null) {
+        dateText = '${DateFormat('MMM d').format(filter.startDate!)} - ${DateFormat('MMM d').format(filter.endDate!)}';
+      } else if (filter.startDate != null) {
+        dateText = 'From ${DateFormat('MMM d').format(filter.startDate!)}';
+      } else {
+        dateText = 'Until ${DateFormat('MMM d').format(filter.endDate!)}';
+      }
+      chips.add(_buildFilterChip(context, ref, dateText, () {
+        ref.read(diveFilterProvider.notifier).state = filter.copyWith(
+          clearStartDate: true,
+          clearEndDate: true,
+        );
+      }));
+    }
+
+    if (filter.diveType != null) {
+      chips.add(_buildFilterChip(context, ref, filter.diveType!.displayName, () {
+        ref.read(diveFilterProvider.notifier).state = filter.copyWith(clearDiveType: true);
+      }));
+    }
+
+    if (filter.siteId != null) {
+      final siteName = ref.watch(siteProvider(filter.siteId!)).value?.name ?? 'Site';
+      chips.add(_buildFilterChip(context, ref, siteName, () {
+        ref.read(diveFilterProvider.notifier).state = filter.copyWith(clearSiteId: true);
+      }));
+    }
+
+    if (filter.minDepth != null || filter.maxDepth != null) {
+      String depthText;
+      if (filter.minDepth != null && filter.maxDepth != null) {
+        depthText = '${filter.minDepth!.toInt()}-${filter.maxDepth!.toInt()}m';
+      } else if (filter.minDepth != null) {
+        depthText = '>${filter.minDepth!.toInt()}m';
+      } else {
+        depthText = '<${filter.maxDepth!.toInt()}m';
+      }
+      chips.add(_buildFilterChip(context, ref, depthText, () {
+        ref.read(diveFilterProvider.notifier).state = filter.copyWith(
+          clearMinDepth: true,
+          clearMaxDepth: true,
+        );
+      }));
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: chips),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(diveFilterProvider.notifier).state = const DiveFilterState();
+            },
+            child: const Text('Clear all'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(BuildContext context, WidgetRef ref, String label, VoidCallback onRemove) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Chip(
+        label: Text(label, style: const TextStyle(fontSize: 12)),
+        deleteIcon: const Icon(Icons.close, size: 16),
+        onDeleted: onRemove,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref, bool hasActiveFilters) {
+    if (hasActiveFilters) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.filter_list_off,
+              size: 80,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No dives match your filters',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try adjusting or clearing your filters',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () {
+                ref.read(diveFilterProvider.notifier).state = const DiveFilterState();
+              },
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear Filters'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -129,6 +270,119 @@ class DiveListPage extends ConsumerWidget {
             label: const Text('Log Your First Dive'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Search delegate for diving through dive logs
+class DiveSearchDelegate extends SearchDelegate<Dive?> {
+  final WidgetRef ref;
+
+  DiveSearchDelegate(this.ref);
+
+  @override
+  String get searchFieldLabel => 'Search dives...';
+
+  @override
+  List<Widget> buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () => query = '',
+        ),
+    ];
+  }
+
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () => close(context, null),
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return _buildSearchResults(context);
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    if (query.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search,
+              size: 64,
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search by site, buddy, or notes',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _buildSearchResults(context);
+  }
+
+  Widget _buildSearchResults(BuildContext context) {
+    final searchAsync = ref.watch(diveSearchProvider(query));
+
+    return searchAsync.when(
+      data: (dives) {
+        if (dives.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No dives found for "$query"',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: dives.length,
+          itemBuilder: (context, index) {
+            final dive = dives[index];
+            return DiveListTile(
+              diveNumber: dive.diveNumber ?? index + 1,
+              dateTime: dive.dateTime,
+              siteName: dive.site?.name,
+              maxDepth: dive.maxDepth,
+              duration: dive.duration,
+              rating: dive.rating,
+              onTap: () {
+                close(context, dive);
+                context.go('/dives/${dive.id}');
+              },
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Center(
+        child: Text('Error: $error'),
       ),
     );
   }
@@ -217,5 +471,288 @@ class DiveListTile extends StatelessWidget {
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
     return '$minutes min';
+  }
+}
+
+/// Filter sheet for dive list
+class DiveFilterSheet extends ConsumerStatefulWidget {
+  final WidgetRef ref;
+
+  const DiveFilterSheet({super.key, required this.ref});
+
+  @override
+  ConsumerState<DiveFilterSheet> createState() => _DiveFilterSheetState();
+}
+
+class _DiveFilterSheetState extends ConsumerState<DiveFilterSheet> {
+  late DateTime? _startDate;
+  late DateTime? _endDate;
+  late DiveType? _diveType;
+  late String? _siteId;
+  late double? _minDepth;
+  late double? _maxDepth;
+
+  final _minDepthController = TextEditingController();
+  final _maxDepthController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final filter = widget.ref.read(diveFilterProvider);
+    _startDate = filter.startDate;
+    _endDate = filter.endDate;
+    _diveType = filter.diveType;
+    _siteId = filter.siteId;
+    _minDepth = filter.minDepth;
+    _maxDepth = filter.maxDepth;
+    _minDepthController.text = _minDepth?.toStringAsFixed(0) ?? '';
+    _maxDepthController.text = _maxDepth?.toStringAsFixed(0) ?? '';
+  }
+
+  @override
+  void dispose() {
+    _minDepthController.dispose();
+    _maxDepthController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sites = ref.watch(sitesProvider);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Filter Dives',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Date Range Section
+              Text('Date Range', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _selectDate(context, isStart: true),
+                      icon: const Icon(Icons.calendar_today, size: 18),
+                      label: Text(
+                        _startDate != null
+                            ? DateFormat('MMM d, y').format(_startDate!)
+                            : 'Start Date',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('to'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _selectDate(context, isStart: false),
+                      icon: const Icon(Icons.calendar_today, size: 18),
+                      label: Text(
+                        _endDate != null
+                            ? DateFormat('MMM d, y').format(_endDate!)
+                            : 'End Date',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_startDate != null || _endDate != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _startDate = null;
+                        _endDate = null;
+                      });
+                    },
+                    child: const Text('Clear dates'),
+                  ),
+                ),
+              const SizedBox(height: 24),
+
+              // Dive Type Section
+              Text('Dive Type', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<DiveType?>(
+                value: _diveType,
+                decoration: const InputDecoration(
+                  hintText: 'All types',
+                  prefixIcon: Icon(Icons.category),
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text('All types'),
+                  ),
+                  ...DiveType.values.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Text(type.displayName),
+                    );
+                  }),
+                ],
+                onChanged: (value) {
+                  setState(() => _diveType = value);
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // Site Section
+              Text('Dive Site', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              sites.when(
+                data: (siteList) => DropdownButtonFormField<String?>(
+                  value: _siteId,
+                  decoration: const InputDecoration(
+                    hintText: 'All sites',
+                    prefixIcon: Icon(Icons.location_on),
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('All sites'),
+                    ),
+                    ...siteList.map((site) {
+                      return DropdownMenuItem(
+                        value: site.id,
+                        child: Text(site.name),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _siteId = value);
+                  },
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (_, __) => const Text('Error loading sites'),
+              ),
+              const SizedBox(height: 24),
+
+              // Depth Range Section
+              Text('Depth Range (meters)', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _minDepthController,
+                      decoration: const InputDecoration(
+                        labelText: 'Min',
+                        prefixIcon: Icon(Icons.arrow_downward),
+                        suffixText: 'm',
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        _minDepth = double.tryParse(value);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextField(
+                      controller: _maxDepthController,
+                      decoration: const InputDecoration(
+                        labelText: 'Max',
+                        prefixIcon: Icon(Icons.arrow_downward),
+                        suffixText: 'm',
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        _maxDepth = double.tryParse(value);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        widget.ref.read(diveFilterProvider.notifier).state =
+                            const DiveFilterState();
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Clear All'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _applyFilters,
+                      child: const Text('Apply Filters'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _selectDate(BuildContext context, {required bool isStart}) async {
+    final initialDate = isStart ? _startDate : _endDate;
+    final firstDate = DateTime(2000);
+    final lastDate = DateTime.now().add(const Duration(days: 365));
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate ?? DateTime.now(),
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startDate = picked;
+        } else {
+          _endDate = picked;
+        }
+      });
+    }
+  }
+
+  void _applyFilters() {
+    widget.ref.read(diveFilterProvider.notifier).state = DiveFilterState(
+      startDate: _startDate,
+      endDate: _endDate,
+      diveType: _diveType,
+      siteId: _siteId,
+      minDepth: _minDepth,
+      maxDepth: _maxDepth,
+    );
+    Navigator.of(context).pop();
   }
 }

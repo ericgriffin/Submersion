@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-class SiteDetailPage extends StatelessWidget {
+import '../../domain/entities/dive_site.dart';
+import '../providers/site_providers.dart';
+
+class SiteDetailPage extends ConsumerWidget {
   final String siteId;
 
   const SiteDetailPage({
@@ -9,16 +14,38 @@ class SiteDetailPage extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final siteAsync = ref.watch(siteProvider(siteId));
+
+    return siteAsync.when(
+      data: (site) {
+        if (site == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Site Not Found')),
+            body: const Center(child: Text('This site no longer exists.')),
+          );
+        }
+        return _buildContent(context, ref, site);
+      },
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Loading...')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(child: Text('Error: $error')),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, WidgetRef ref, DiveSite site) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Site Details'),
+        title: Text(site.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () {
-              // TODO: Edit site
-            },
+            onPressed: () => context.push('/sites/$siteId/edit'),
           ),
         ],
       ),
@@ -27,20 +54,26 @@ class SiteDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderSection(context),
+            _buildHeaderSection(context, site),
             const SizedBox(height: 24),
-            _buildMapPlaceholder(context),
-            const SizedBox(height: 24),
-            _buildDetailsSection(context),
-            const SizedBox(height: 24),
-            _buildDivesSection(context),
+            if (site.hasCoordinates) _buildMapPlaceholder(context, site),
+            if (site.hasCoordinates) const SizedBox(height: 24),
+            if (site.description.isNotEmpty) ...[
+              _buildDescriptionSection(context, site),
+              const SizedBox(height: 24),
+            ],
+            _buildDetailsSection(context, site),
+            if (site.notes.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _buildNotesSection(context, site),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeaderSection(BuildContext context) {
+  Widget _buildHeaderSection(BuildContext context, DiveSite site) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -63,15 +96,16 @@ class SiteDetailPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Loading...',
+                        site.name,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      Text(
-                        'Location',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                      ),
+                      if (site.locationString.isNotEmpty)
+                        Text(
+                          site.locationString,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
                     ],
                   ),
                 ),
@@ -81,9 +115,18 @@ class SiteDetailPage extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem(context, Icons.waves, '--', 'Dives'),
-                _buildStatItem(context, Icons.arrow_downward, '--', 'Max Depth'),
-                _buildStatItem(context, Icons.star, '--', 'Rating'),
+                _buildStatItem(
+                  context,
+                  Icons.arrow_downward,
+                  site.maxDepth != null ? '${site.maxDepth!.toStringAsFixed(0)}m' : '--',
+                  'Max Depth',
+                ),
+                _buildStatItem(
+                  context,
+                  Icons.star,
+                  site.rating != null ? site.rating!.toStringAsFixed(1) : '--',
+                  'Rating',
+                ),
               ],
             ),
           ],
@@ -108,7 +151,7 @@ class SiteDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMapPlaceholder(BuildContext context) {
+  Widget _buildMapPlaceholder(BuildContext context, DiveSite site) {
     return Card(
       child: Container(
         height: 200,
@@ -127,10 +170,11 @@ class SiteDetailPage extends StatelessWidget {
                 'Map View',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              Text(
-                'Map will appear here when location is set',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              if (site.location != null)
+                Text(
+                  site.location.toString(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
             ],
           ),
         ),
@@ -138,7 +182,29 @@ class SiteDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailsSection(BuildContext context) {
+  Widget _buildDescriptionSection(BuildContext context, DiveSite site) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Description',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              site.description,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailsSection(BuildContext context, DiveSite site) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -150,10 +216,16 @@ class SiteDetailPage extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Divider(),
-            _buildDetailRow(context, 'Water Type', '--'),
-            _buildDetailRow(context, 'Typical Visibility', '--'),
-            _buildDetailRow(context, 'Current', '--'),
-            _buildDetailRow(context, 'Entry Type', '--'),
+            if (site.country != null)
+              _buildDetailRow(context, 'Country', site.country!),
+            if (site.region != null)
+              _buildDetailRow(context, 'Region', site.region!),
+            if (site.maxDepth != null)
+              _buildDetailRow(context, 'Max Depth', '${site.maxDepth!.toStringAsFixed(1)} m'),
+            if (site.rating != null)
+              _buildDetailRow(context, 'Rating', '${site.rating!.toStringAsFixed(1)} / 5'),
+            if (site.hasCoordinates)
+              _buildDetailRow(context, 'Coordinates', site.location.toString()),
           ],
         ),
       ),
@@ -178,28 +250,31 @@ class SiteDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDivesSection(BuildContext context) {
+  Widget _buildNotesSection(BuildContext context, DiveSite site) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Recent Dives',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const Divider(),
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'No dives at this site yet',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+            Row(
+              children: [
+                Icon(
+                  Icons.notes,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-              ),
+                const SizedBox(width: 8),
+                Text(
+                  'Notes',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              site.notes,
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
         ),

@@ -1,7 +1,103 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/constants/enums.dart';
 import '../../data/repositories/dive_repository_impl.dart';
 import '../../domain/entities/dive.dart' as domain;
+
+/// Filter state for dive list
+class DiveFilterState {
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final DiveType? diveType;
+  final String? siteId;
+  final double? minDepth;
+  final double? maxDepth;
+
+  const DiveFilterState({
+    this.startDate,
+    this.endDate,
+    this.diveType,
+    this.siteId,
+    this.minDepth,
+    this.maxDepth,
+  });
+
+  bool get hasActiveFilters =>
+      startDate != null ||
+      endDate != null ||
+      diveType != null ||
+      siteId != null ||
+      minDepth != null ||
+      maxDepth != null;
+
+  DiveFilterState copyWith({
+    DateTime? startDate,
+    DateTime? endDate,
+    DiveType? diveType,
+    String? siteId,
+    double? minDepth,
+    double? maxDepth,
+    bool clearStartDate = false,
+    bool clearEndDate = false,
+    bool clearDiveType = false,
+    bool clearSiteId = false,
+    bool clearMinDepth = false,
+    bool clearMaxDepth = false,
+  }) {
+    return DiveFilterState(
+      startDate: clearStartDate ? null : (startDate ?? this.startDate),
+      endDate: clearEndDate ? null : (endDate ?? this.endDate),
+      diveType: clearDiveType ? null : (diveType ?? this.diveType),
+      siteId: clearSiteId ? null : (siteId ?? this.siteId),
+      minDepth: clearMinDepth ? null : (minDepth ?? this.minDepth),
+      maxDepth: clearMaxDepth ? null : (maxDepth ?? this.maxDepth),
+    );
+  }
+
+  /// Filter a list of dives based on current filter state
+  List<domain.Dive> apply(List<domain.Dive> dives) {
+    return dives.where((dive) {
+      // Date range filter
+      if (startDate != null && dive.dateTime.isBefore(startDate!)) {
+        return false;
+      }
+      if (endDate != null && dive.dateTime.isAfter(endDate!.add(const Duration(days: 1)))) {
+        return false;
+      }
+
+      // Dive type filter
+      if (diveType != null && dive.diveType != diveType) {
+        return false;
+      }
+
+      // Site filter
+      if (siteId != null && dive.site?.id != siteId) {
+        return false;
+      }
+
+      // Depth filter
+      if (minDepth != null && (dive.maxDepth == null || dive.maxDepth! < minDepth!)) {
+        return false;
+      }
+      if (maxDepth != null && (dive.maxDepth == null || dive.maxDepth! > maxDepth!)) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+  }
+}
+
+/// Dive filter state provider
+final diveFilterProvider = StateProvider<DiveFilterState>((ref) => const DiveFilterState());
+
+/// Filtered dives provider - applies current filter to dive list
+final filteredDivesProvider = Provider<AsyncValue<List<domain.Dive>>>((ref) {
+  final divesAsync = ref.watch(diveListNotifierProvider);
+  final filter = ref.watch(diveFilterProvider);
+
+  return divesAsync.whenData((dives) => filter.apply(dives));
+});
 
 /// Repository provider
 final diveRepositoryProvider = Provider<DiveRepository>((ref) {

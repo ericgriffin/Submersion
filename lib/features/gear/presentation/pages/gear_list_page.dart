@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/enums.dart';
+import '../../domain/entities/gear_item.dart';
+import '../providers/gear_providers.dart';
 
-class GearListPage extends StatelessWidget {
+class GearListPage extends ConsumerWidget {
   const GearListPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -22,20 +26,23 @@ class GearListPage extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.search),
               onPressed: () {
-                // TODO: Implement search
+                showSearch(
+                  context: context,
+                  delegate: GearSearchDelegate(ref),
+                );
               },
             ),
           ],
         ),
         body: TabBarView(
           children: [
-            _buildEmptyState(context),
-            _buildEmptyState(context, isRetired: true),
+            _ActiveGearTab(),
+            _RetiredGearTab(),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () {
-            _showAddGearDialog(context);
+            _showAddGearDialog(context, ref);
           },
           icon: const Icon(Icons.add),
           label: const Text('Add Gear'),
@@ -44,7 +51,67 @@ class GearListPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, {bool isRetired = false}) {
+  void _showAddGearDialog(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => AddGearSheet(ref: ref),
+    );
+  }
+}
+
+class _ActiveGearTab extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gearAsync = ref.watch(gearListNotifierProvider);
+
+    return gearAsync.when(
+      data: (gear) => gear.isEmpty
+          ? _buildEmptyState(context, ref)
+          : _buildGearList(context, ref, gear),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('Error loading gear: $error'),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => ref.read(gearListNotifierProvider.notifier).refresh(),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGearList(BuildContext context, WidgetRef ref, List<GearItem> gear) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(gearListNotifierProvider.notifier).refresh();
+      },
+      child: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 80),
+        itemCount: gear.length,
+        itemBuilder: (context, index) {
+          final item = gear[index];
+          return GearListTile(
+            name: item.name,
+            type: item.type,
+            brandModel: item.fullName != item.name ? item.fullName : null,
+            isServiceDue: item.isServiceDue,
+            daysUntilService: item.daysUntilService,
+            onTap: () => context.push('/gear/${item.id}'),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -56,51 +123,114 @@ class GearListPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            isRetired ? 'No retired gear' : 'No gear added yet',
+            'No gear added yet',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
           Text(
-            isRetired
-                ? 'Retired gear will appear here'
-                : 'Add your diving equipment to track usage and service',
+            'Add your diving equipment to track usage and service',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
             textAlign: TextAlign.center,
           ),
-          if (!isRetired) ...[
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () {
-                _showAddGearDialog(context);
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add Your First Gear'),
-            ),
-          ],
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) => AddGearSheet(ref: ref),
+              );
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add Your First Gear'),
+          ),
         ],
       ),
     );
   }
+}
 
-  void _showAddGearDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => const AddGearSheet(),
+class _RetiredGearTab extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final retiredAsync = ref.watch(retiredGearProvider);
+
+    return retiredAsync.when(
+      data: (gear) => gear.isEmpty
+          ? _buildEmptyState(context)
+          : _buildGearList(context, ref, gear),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('Error: $error'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGearList(BuildContext context, WidgetRef ref, List<GearItem> gear) {
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 80),
+      itemCount: gear.length,
+      itemBuilder: (context, index) {
+        final item = gear[index];
+        return GearListTile(
+          name: item.name,
+          type: item.type,
+          brandModel: item.fullName != item.name ? item.fullName : null,
+          isServiceDue: false,
+          onTap: () => context.push('/gear/${item.id}'),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inventory_2,
+            size: 80,
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No retired gear',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Retired gear will appear here',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
 
-class AddGearSheet extends StatefulWidget {
-  const AddGearSheet({super.key});
+class AddGearSheet extends ConsumerStatefulWidget {
+  final WidgetRef ref;
+
+  const AddGearSheet({super.key, required this.ref});
 
   @override
-  State<AddGearSheet> createState() => _AddGearSheetState();
+  ConsumerState<AddGearSheet> createState() => _AddGearSheetState();
 }
 
-class _AddGearSheetState extends State<AddGearSheet> {
+class _AddGearSheetState extends ConsumerState<AddGearSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
@@ -108,6 +238,7 @@ class _AddGearSheetState extends State<AddGearSheet> {
   final _serialController = TextEditingController();
 
   GearType _selectedType = GearType.regulator;
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -211,8 +342,14 @@ class _AddGearSheetState extends State<AddGearSheet> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed: _saveGear,
-                  child: const Text('Add Gear'),
+                  onPressed: _isSaving ? null : _saveGear,
+                  child: _isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Add Gear'),
                 ),
               ],
             ),
@@ -222,10 +359,40 @@ class _AddGearSheetState extends State<AddGearSheet> {
     );
   }
 
-  void _saveGear() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: Save gear to database
-      Navigator.of(context).pop();
+  Future<void> _saveGear() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      final gear = GearItem(
+        id: '',
+        name: _nameController.text.trim(),
+        type: _selectedType,
+        brand: _brandController.text.trim().isEmpty ? null : _brandController.text.trim(),
+        model: _modelController.text.trim().isEmpty ? null : _modelController.text.trim(),
+        serialNumber: _serialController.text.trim().isEmpty ? null : _serialController.text.trim(),
+        isActive: true,
+      );
+
+      await widget.ref.read(gearListNotifierProvider.notifier).addGear(gear);
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gear added successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding gear: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        setState(() => _isSaving = false);
+      }
     }
   }
 }
@@ -313,5 +480,117 @@ class GearListTile extends StatelessWidget {
       default:
         return Icons.inventory_2;
     }
+  }
+}
+
+/// Search delegate for gear
+class GearSearchDelegate extends SearchDelegate<GearItem?> {
+  final WidgetRef ref;
+
+  GearSearchDelegate(this.ref);
+
+  @override
+  String get searchFieldLabel => 'Search gear...';
+
+  @override
+  List<Widget> buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () => query = '',
+        ),
+    ];
+  }
+
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () => close(context, null),
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return _buildSearchResults(context);
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    if (query.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search,
+              size: 64,
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search by name, brand, model, or serial number',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _buildSearchResults(context);
+  }
+
+  Widget _buildSearchResults(BuildContext context) {
+    final searchAsync = ref.watch(gearSearchProvider(query));
+
+    return searchAsync.when(
+      data: (gear) {
+        if (gear.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No gear found for "$query"',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: gear.length,
+          itemBuilder: (context, index) {
+            final item = gear[index];
+            return GearListTile(
+              name: item.name,
+              type: item.type,
+              brandModel: item.fullName != item.name ? item.fullName : null,
+              isServiceDue: item.isServiceDue,
+              daysUntilService: item.daysUntilService,
+              onTap: () {
+                close(context, item);
+                context.push('/gear/${item.id}');
+              },
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Center(
+        child: Text('Error: $error'),
+      ),
+    );
   }
 }

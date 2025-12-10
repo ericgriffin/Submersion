@@ -1,0 +1,451 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../domain/entities/dive_site.dart';
+import '../providers/site_providers.dart';
+
+class SiteEditPage extends ConsumerStatefulWidget {
+  final String? siteId;
+
+  const SiteEditPage({super.key, this.siteId});
+
+  bool get isEditing => siteId != null;
+
+  @override
+  ConsumerState<SiteEditPage> createState() => _SiteEditPageState();
+}
+
+class _SiteEditPageState extends ConsumerState<SiteEditPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _countryController = TextEditingController();
+  final _regionController = TextEditingController();
+  final _maxDepthController = TextEditingController();
+  final _latitudeController = TextEditingController();
+  final _longitudeController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  double _rating = 0;
+  bool _isLoading = false;
+  bool _isInitialized = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _countryController.dispose();
+    _regionController.dispose();
+    _maxDepthController.dispose();
+    _latitudeController.dispose();
+    _longitudeController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _initializeFromSite(DiveSite site) {
+    if (_isInitialized) return;
+    _isInitialized = true;
+
+    _nameController.text = site.name;
+    _descriptionController.text = site.description;
+    _countryController.text = site.country ?? '';
+    _regionController.text = site.region ?? '';
+    _maxDepthController.text = site.maxDepth?.toString() ?? '';
+    _latitudeController.text = site.location?.latitude.toString() ?? '';
+    _longitudeController.text = site.location?.longitude.toString() ?? '';
+    _notesController.text = site.notes;
+    _rating = site.rating ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isEditing) {
+      final siteAsync = ref.watch(siteProvider(widget.siteId!));
+      return siteAsync.when(
+        data: (site) {
+          if (site == null) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Site Not Found')),
+              body: const Center(child: Text('This site no longer exists.')),
+            );
+          }
+          _initializeFromSite(site);
+          return _buildForm(context);
+        },
+        loading: () => Scaffold(
+          appBar: AppBar(title: const Text('Loading...')),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
+        error: (error, _) => Scaffold(
+          appBar: AppBar(title: const Text('Error')),
+          body: Center(child: Text('Error: $error')),
+        ),
+      );
+    }
+
+    return _buildForm(context);
+  }
+
+  Widget _buildForm(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.isEditing ? 'Edit Site' : 'New Site'),
+        actions: [
+          if (widget.isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _confirmDelete,
+            ),
+        ],
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Name
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Site Name *',
+                prefixIcon: Icon(Icons.location_on),
+                hintText: 'e.g., Blue Hole',
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a site name';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Description
+            TextFormField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                prefixIcon: Icon(Icons.description),
+                hintText: 'Brief description of the site',
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+
+            // Country & Region
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _countryController,
+                    decoration: const InputDecoration(
+                      labelText: 'Country',
+                      prefixIcon: Icon(Icons.flag),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _regionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Region',
+                      prefixIcon: Icon(Icons.map),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Max Depth
+            TextFormField(
+              controller: _maxDepthController,
+              decoration: const InputDecoration(
+                labelText: 'Max Depth (m)',
+                prefixIcon: Icon(Icons.arrow_downward),
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 16),
+
+            // Rating
+            _buildRatingSection(context),
+            const SizedBox(height: 16),
+
+            // GPS Coordinates
+            _buildGpsSection(context),
+            const SizedBox(height: 16),
+
+            // Notes
+            TextFormField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                labelText: 'Notes',
+                prefixIcon: Icon(Icons.notes),
+                hintText: 'Access instructions, tips, etc.',
+              ),
+              maxLines: 4,
+            ),
+            const SizedBox(height: 32),
+
+            // Save Button
+            FilledButton(
+              onPressed: _isLoading ? null : _saveSite,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(widget.isEditing ? 'Save Changes' : 'Add Site'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRatingSection(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Rating',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                return IconButton(
+                  icon: Icon(
+                    index < _rating ? Icons.star : Icons.star_border,
+                    color: Colors.amber,
+                    size: 32,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _rating = index + 1.0;
+                    });
+                  },
+                );
+              }),
+            ),
+            if (_rating > 0)
+              Center(
+                child: TextButton(
+                  onPressed: () => setState(() => _rating = 0),
+                  child: const Text('Clear Rating'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGpsSection(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.gps_fixed),
+                const SizedBox(width: 8),
+                Text(
+                  'GPS Coordinates',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Optional: Add coordinates for map display',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _latitudeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Latitude',
+                      hintText: 'e.g., 21.4225',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty) {
+                        final lat = double.tryParse(value);
+                        if (lat == null || lat < -90 || lat > 90) {
+                          return 'Invalid latitude';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _longitudeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Longitude',
+                      hintText: 'e.g., -86.7542',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty) {
+                        final lng = double.tryParse(value);
+                        if (lng == null || lng < -180 || lng > 180) {
+                          return 'Invalid longitude';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveSite() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      GeoPoint? location;
+      if (_latitudeController.text.isNotEmpty && _longitudeController.text.isNotEmpty) {
+        final lat = double.tryParse(_latitudeController.text);
+        final lng = double.tryParse(_longitudeController.text);
+        if (lat != null && lng != null) {
+          location = GeoPoint(lat, lng);
+        }
+      }
+
+      final site = DiveSite(
+        id: widget.siteId ?? '',
+        name: _nameController.text.trim(),
+        description: _descriptionController.text.trim(),
+        country: _countryController.text.trim().isEmpty ? null : _countryController.text.trim(),
+        region: _regionController.text.trim().isEmpty ? null : _regionController.text.trim(),
+        maxDepth: double.tryParse(_maxDepthController.text),
+        location: location,
+        rating: _rating > 0 ? _rating : null,
+        notes: _notesController.text.trim(),
+      );
+
+      final notifier = ref.read(siteListNotifierProvider.notifier);
+
+      if (widget.isEditing) {
+        await notifier.updateSite(site);
+      } else {
+        await notifier.addSite(site);
+      }
+
+      // Invalidate providers to refresh data
+      ref.invalidate(sitesWithCountsProvider);
+      ref.invalidate(sitesProvider);
+
+      if (mounted) {
+        context.pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isEditing ? 'Site updated' : 'Site added'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving site: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Site'),
+        content: const Text(
+          'Are you sure you want to delete this site? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteSite();
+    }
+  }
+
+  Future<void> _deleteSite() async {
+    setState(() => _isLoading = true);
+
+    try {
+      await ref.read(siteListNotifierProvider.notifier).deleteSite(widget.siteId!);
+      ref.invalidate(sitesWithCountsProvider);
+      ref.invalidate(sitesProvider);
+
+      if (mounted) {
+        context.go('/sites');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Site deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting site: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+}

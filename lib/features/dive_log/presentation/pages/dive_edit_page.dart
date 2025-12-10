@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/enums.dart';
+import '../../../dive_sites/domain/entities/dive_site.dart';
+import '../../../dive_sites/presentation/providers/site_providers.dart';
 import '../../domain/entities/dive.dart';
 import '../providers/dive_providers.dart';
 
@@ -41,6 +43,7 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
   DiveType _selectedDiveType = DiveType.recreational;
   Visibility _selectedVisibility = Visibility.unknown;
   int _rating = 0;
+  DiveSite? _selectedSite;
 
   // Tank data
   final _tankVolumeController = TextEditingController(text: '12');
@@ -83,6 +86,7 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
           _selectedDiveType = dive.diveType;
           _selectedVisibility = dive.visibility ?? Visibility.unknown;
           _rating = dive.rating ?? 0;
+          _selectedSite = dive.site;
 
           // Load tank data if available
           if (dive.tanks.isNotEmpty) {
@@ -218,23 +222,63 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
           children: [
             Text('Dive Site', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: () {
-                // TODO: Open site picker
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Site picker coming soon'),
-                    duration: Duration(seconds: 2),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _showSitePicker,
+                    icon: const Icon(Icons.location_on),
+                    label: Text(
+                      _selectedSite?.name ?? 'Select Dive Site',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                   ),
-                );
-              },
-              icon: const Icon(Icons.location_on),
-              label: Text(_existingDive?.site?.name ?? 'Select Dive Site'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-              ),
+                ),
+                if (_selectedSite != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() => _selectedSite = null),
+                    tooltip: 'Clear site',
+                  ),
+                ],
+              ],
             ),
+            if (_selectedSite != null && _selectedSite!.locationString.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _selectedSite!.locationString,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showSitePicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _SitePickerSheet(
+          scrollController: scrollController,
+          selectedSiteId: _selectedSite?.id,
+          onSiteSelected: (site) {
+            setState(() => _selectedSite = site);
+            Navigator.of(context).pop();
+          },
         ),
       ),
     );
@@ -607,7 +651,7 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
         diveMaster: _diveMasterController.text.isNotEmpty ? _diveMasterController.text : null,
         notes: _notesController.text,
         rating: _rating > 0 ? _rating : null,
-        site: _existingDive?.site,
+        site: _selectedSite,
         tanks: tanks,
       );
 
@@ -636,5 +680,115 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
         setState(() => _isSaving = false);
       }
     }
+  }
+}
+
+/// Site picker bottom sheet
+class _SitePickerSheet extends ConsumerWidget {
+  final ScrollController scrollController;
+  final String? selectedSiteId;
+  final void Function(DiveSite) onSiteSelected;
+
+  const _SitePickerSheet({
+    required this.scrollController,
+    required this.selectedSiteId,
+    required this.onSiteSelected,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sitesAsync = ref.watch(sitesProvider);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Select Dive Site',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: sitesAsync.when(
+            data: (sites) {
+              if (sites.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.location_off,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No dive sites yet',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Add sites from the Sites tab',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                controller: scrollController,
+                itemCount: sites.length,
+                itemBuilder: (context, index) {
+                  final site = sites[index];
+                  final isSelected = site.id == selectedSiteId;
+
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isSelected
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Icon(
+                        Icons.location_on,
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    title: Text(site.name),
+                    subtitle: site.locationString.isNotEmpty
+                        ? Text(site.locationString)
+                        : null,
+                    trailing: isSelected
+                        ? Icon(
+                            Icons.check_circle,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
+                        : null,
+                    onTap: () => onSiteSelected(site),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Text('Error loading sites: $error'),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
