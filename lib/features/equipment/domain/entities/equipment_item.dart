@@ -2,11 +2,11 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../core/constants/enums.dart';
 
-/// Diving equipment/gear entity
-class GearItem extends Equatable {
+/// Diving equipment entity
+class EquipmentItem extends Equatable {
   final String id;
   final String name;
-  final GearType type;
+  final EquipmentType type;
   final String? brand;
   final String? model;
   final String? serialNumber;
@@ -16,7 +16,7 @@ class GearItem extends Equatable {
   final String notes;
   final bool isActive;
 
-  const GearItem({
+  const EquipmentItem({
     required this.id,
     required this.name,
     required this.type,
@@ -64,10 +64,10 @@ class GearItem extends Equatable {
     return DateTime.now().difference(purchaseDate!);
   }
 
-  GearItem copyWith({
+  EquipmentItem copyWith({
     String? id,
     String? name,
-    GearType? type,
+    EquipmentType? type,
     String? brand,
     String? model,
     String? serialNumber,
@@ -77,7 +77,7 @@ class GearItem extends Equatable {
     String? notes,
     bool? isActive,
   }) {
-    return GearItem(
+    return EquipmentItem(
       id: id ?? this.id,
       name: name ?? this.name,
       type: type ?? this.type,
@@ -108,10 +108,10 @@ class GearItem extends Equatable {
       ];
 }
 
-/// Service record for gear maintenance
+/// Service record for equipment maintenance
 class ServiceRecord extends Equatable {
   final String id;
-  final String gearId;
+  final String equipmentId;
   final DateTime date;
   final String description;
   final double? cost;
@@ -119,7 +119,7 @@ class ServiceRecord extends Equatable {
 
   const ServiceRecord({
     required this.id,
-    required this.gearId,
+    required this.equipmentId,
     required this.date,
     required this.description,
     this.cost,
@@ -127,5 +127,5 @@ class ServiceRecord extends Equatable {
   });
 
   @override
-  List<Object?> get props => [id, gearId, date, description, cost, provider];
+  List<Object?> get props => [id, equipmentId, date, description, cost, provider];
 }

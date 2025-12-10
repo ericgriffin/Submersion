@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/units.dart';
+import '../providers/export_providers.dart';
 import '../providers/settings_providers.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -45,21 +46,19 @@ class SettingsPage extends ConsumerWidget {
 
           _buildSectionHeader(context, 'Data'),
           ListTile(
-            leading: const Icon(Icons.upload),
+            leading: const Icon(Icons.file_download),
             title: const Text('Import'),
             subtitle: const Text('Import dives from file'),
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Import feature coming soon')),
-              );
+              _showImportOptions(context, ref);
             },
           ),
           ListTile(
-            leading: const Icon(Icons.download),
+            leading: const Icon(Icons.file_upload),
             title: const Text('Export'),
-            subtitle: const Text('Export all dives'),
+            subtitle: const Text('Export your data'),
             onTap: () {
-              _showExportOptions(context);
+              _showExportOptions(context, ref);
             },
           ),
           ListTile(
@@ -67,9 +66,7 @@ class SettingsPage extends ConsumerWidget {
             title: const Text('Backup'),
             subtitle: const Text('Create a backup of your data'),
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Backup feature coming soon')),
-              );
+              _handleExport(context, ref, () => ref.read(exportNotifierProvider.notifier).createBackup());
             },
           ),
           ListTile(
@@ -77,9 +74,7 @@ class SettingsPage extends ConsumerWidget {
             title: const Text('Restore'),
             subtitle: const Text('Restore from backup'),
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Restore feature coming soon')),
-              );
+              _showRestoreConfirmation(context, ref);
             },
           ),
           const Divider(),
@@ -331,50 +326,224 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  void _showExportOptions(BuildContext context) {
+  void _showRestoreConfirmation(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Restore Backup'),
+        content: const Text(
+          'Warning: Restoring from a backup will replace ALL current data with the backup data. '
+          'This action cannot be undone.\n\n'
+          'Are you sure you want to continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _handleImport(context, ref, () => ref.read(exportNotifierProvider.notifier).restoreBackup());
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showImportOptions(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.code),
-              title: const Text('Export as UDDF'),
-              subtitle: const Text('Universal Dive Data Format (XML)'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('UDDF export coming soon')),
-                );
-              },
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Import Data',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.table_chart),
-              title: const Text('Export as CSV'),
-              subtitle: const Text('Spreadsheet format'),
+              title: const Text('Import from CSV'),
+              subtitle: const Text('Import dives from CSV file'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('CSV export coming soon')),
-                );
+                _handleImport(context, ref, () => ref.read(exportNotifierProvider.notifier).importDivesFromCsv());
               },
             ),
             ListTile(
-              leading: const Icon(Icons.picture_as_pdf),
-              title: const Text('Export as PDF'),
-              subtitle: const Text('Printable logbook'),
+              leading: const Icon(Icons.code),
+              title: const Text('Import from UDDF'),
+              subtitle: const Text('Universal Dive Data Format'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PDF export coming soon')),
-                );
+                _handleImport(context, ref, () => ref.read(exportNotifierProvider.notifier).importDivesFromUddf());
               },
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
+  }
+
+  void _showExportOptions(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Export Data',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('PDF Logbook'),
+              subtitle: const Text('Printable dive logbook'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleExport(context, ref, () => ref.read(exportNotifierProvider.notifier).exportDivesToPdf());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text('Dives as CSV'),
+              subtitle: const Text('Spreadsheet format'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleExport(context, ref, () => ref.read(exportNotifierProvider.notifier).exportDivesToCsv());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.location_on),
+              title: const Text('Sites as CSV'),
+              subtitle: const Text('Export dive sites'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleExport(context, ref, () => ref.read(exportNotifierProvider.notifier).exportSitesToCsv());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.build),
+              title: const Text('Equipment as CSV'),
+              subtitle: const Text('Export equipment inventory'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleExport(context, ref, () => ref.read(exportNotifierProvider.notifier).exportEquipmentToCsv());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.code),
+              title: const Text('UDDF Export'),
+              subtitle: const Text('Universal Dive Data Format'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleExport(context, ref, () => ref.read(exportNotifierProvider.notifier).exportDivesToUddf());
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Handle export operations that use Share (no file picker)
+  Future<void> _handleExport(BuildContext context, WidgetRef ref, Future<void> Function() exportFn) async {
+    // Show loading indicator using root navigator to avoid conflicts
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (dialogContext) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Text('Exporting...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await exportFn();
+      if (context.mounted) {
+        // Use post-frame callback to safely close dialog after any navigation settles
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+            final state = ref.read(exportNotifierProvider);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message ?? 'Export completed'),
+                backgroundColor: state.status == ExportStatus.success ? Colors.green : Colors.red,
+              ),
+            );
+            ref.read(exportNotifierProvider.notifier).reset();
+          }
+        });
+      }
+    } catch (e) {
+      if (context.mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Export failed: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        });
+      }
+    }
+  }
+
+  /// Handle import/restore operations that use native file picker
+  /// Don't show loading dialog before file picker to avoid navigator lock
+  Future<void> _handleImport(BuildContext context, WidgetRef ref, Future<void> Function() importFn) async {
+    try {
+      await importFn();
+      if (context.mounted) {
+        final state = ref.read(exportNotifierProvider);
+        // Only show snackbar if not cancelled (idle status means user cancelled)
+        if (state.status != ExportStatus.idle) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message ?? 'Operation completed'),
+              backgroundColor: state.status == ExportStatus.success ? Colors.green : Colors.red,
+            ),
+          );
+        }
+        ref.read(exportNotifierProvider.notifier).reset();
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Operation failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showAboutDialog(BuildContext context) {

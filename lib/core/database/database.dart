@@ -67,7 +67,7 @@ class DiveSites extends Table {
 class DiveTanks extends Table {
   TextColumn get id => text()();
   TextColumn get diveId => text().references(Dives, #id, onDelete: KeyAction.cascade)();
-  TextColumn get gearId => text().nullable().references(Gear, #id)();
+  TextColumn get equipmentId => text().nullable().references(Equipment, #id)();
   RealColumn get volume => real().nullable()(); // liters
   IntColumn get startPressure => integer().nullable()(); // bar
   IntColumn get endPressure => integer().nullable()(); // bar
@@ -79,8 +79,8 @@ class DiveTanks extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Gear/equipment catalog
-class Gear extends Table {
+/// Equipment catalog
+class Equipment extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get type => text()(); // regulator, bcd, wetsuit, etc.
@@ -99,13 +99,34 @@ class Gear extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Junction table for gear used per dive
-class DiveGear extends Table {
+/// Junction table for equipment used per dive
+class DiveEquipment extends Table {
   TextColumn get diveId => text().references(Dives, #id, onDelete: KeyAction.cascade)();
-  TextColumn get gearId => text().references(Gear, #id, onDelete: KeyAction.cascade)();
+  TextColumn get equipmentId => text().references(Equipment, #id, onDelete: KeyAction.cascade)();
 
   @override
-  Set<Column> get primaryKey => {diveId, gearId};
+  Set<Column> get primaryKey => {diveId, equipmentId};
+}
+
+/// Equipment sets (named collections of equipment items)
+class EquipmentSets extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  IntColumn get createdAt => integer()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Junction table for equipment items in sets
+class EquipmentSetItems extends Table {
+  TextColumn get setId => text().references(EquipmentSets, #id, onDelete: KeyAction.cascade)();
+  TextColumn get equipmentId => text().references(Equipment, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column> get primaryKey => {setId, equipmentId};
 }
 
 /// Marine life species catalog
@@ -169,8 +190,10 @@ class Settings extends Table {
     DiveProfiles,
     DiveSites,
     DiveTanks,
-    Gear,
-    DiveGear,
+    Equipment,
+    DiveEquipment,
+    EquipmentSets,
+    EquipmentSetItems,
     Species,
     Sightings,
     Media,
@@ -181,7 +204,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
@@ -190,8 +213,65 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // Handle migrations here as schema evolves
-        // See MIGRATION_STRATEGY.md for details
+        if (from < 2) {
+          // Migration v1 -> v2: Rename gear to equipment, add equipment sets
+          // Rename gear table to equipment
+          await customStatement('ALTER TABLE gear RENAME TO equipment');
+          // Rename dive_gear table to dive_equipment and update column name
+          await customStatement('ALTER TABLE dive_gear RENAME TO dive_equipment');
+          // Rename gear_id column in dive_equipment to equipment_id
+          await customStatement('''
+            CREATE TABLE dive_equipment_new (
+              dive_id TEXT NOT NULL REFERENCES dives(id) ON DELETE CASCADE,
+              equipment_id TEXT NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
+              PRIMARY KEY (dive_id, equipment_id)
+            )
+          ''');
+          await customStatement('''
+            INSERT INTO dive_equipment_new (dive_id, equipment_id)
+            SELECT dive_id, gear_id FROM dive_equipment
+          ''');
+          await customStatement('DROP TABLE dive_equipment');
+          await customStatement('ALTER TABLE dive_equipment_new RENAME TO dive_equipment');
+          // Rename gear_id column in dive_tanks to equipment_id
+          await customStatement('''
+            CREATE TABLE dive_tanks_new (
+              id TEXT NOT NULL PRIMARY KEY,
+              dive_id TEXT NOT NULL REFERENCES dives(id) ON DELETE CASCADE,
+              equipment_id TEXT REFERENCES equipment(id),
+              volume REAL,
+              start_pressure INTEGER,
+              end_pressure INTEGER,
+              o2_percent REAL NOT NULL DEFAULT 21.0,
+              he_percent REAL NOT NULL DEFAULT 0.0,
+              tank_order INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          await customStatement('''
+            INSERT INTO dive_tanks_new (id, dive_id, equipment_id, volume, start_pressure, end_pressure, o2_percent, he_percent, tank_order)
+            SELECT id, dive_id, gear_id, volume, start_pressure, end_pressure, o2_percent, he_percent, tank_order FROM dive_tanks
+          ''');
+          await customStatement('DROP TABLE dive_tanks');
+          await customStatement('ALTER TABLE dive_tanks_new RENAME TO dive_tanks');
+          // Create new equipment_sets table
+          await customStatement('''
+            CREATE TABLE equipment_sets (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL DEFAULT '',
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )
+          ''');
+          // Create new equipment_set_items junction table
+          await customStatement('''
+            CREATE TABLE equipment_set_items (
+              set_id TEXT NOT NULL REFERENCES equipment_sets(id) ON DELETE CASCADE,
+              equipment_id TEXT NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
+              PRIMARY KEY (set_id, equipment_id)
+            )
+          ''');
+        }
       },
       beforeOpen: (details) async {
         // Enable foreign keys

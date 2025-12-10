@@ -9,9 +9,12 @@ import '../../features/dive_sites/presentation/pages/site_list_page.dart';
 import '../../features/dive_sites/presentation/pages/site_detail_page.dart';
 import '../../features/dive_sites/presentation/pages/site_edit_page.dart';
 import '../../features/dive_sites/presentation/pages/site_map_page.dart';
-import '../../features/gear/presentation/pages/gear_list_page.dart';
-import '../../features/gear/presentation/pages/gear_detail_page.dart';
-import '../../features/gear/presentation/pages/gear_edit_page.dart';
+import '../../features/equipment/presentation/pages/equipment_list_page.dart';
+import '../../features/equipment/presentation/pages/equipment_detail_page.dart';
+import '../../features/equipment/presentation/pages/equipment_edit_page.dart';
+import '../../features/equipment/presentation/pages/equipment_set_list_page.dart';
+import '../../features/equipment/presentation/pages/equipment_set_detail_page.dart';
+import '../../features/equipment/presentation/pages/equipment_set_edit_page.dart';
 import '../../features/statistics/presentation/pages/statistics_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../shared/widgets/main_scaffold.dart';
@@ -92,31 +95,59 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Gear
+          // Equipment
           GoRoute(
-            path: '/gear',
-            name: 'gear',
+            path: '/equipment',
+            name: 'equipment',
             pageBuilder: (context, state) => const NoTransitionPage(
-              child: GearListPage(),
+              child: EquipmentListPage(),
             ),
             routes: [
               GoRoute(
                 path: 'new',
-                name: 'newGear',
-                builder: (context, state) => const GearEditPage(),
+                name: 'newEquipment',
+                builder: (context, state) => const EquipmentEditPage(),
               ),
               GoRoute(
-                path: ':gearId',
-                name: 'gearDetail',
-                builder: (context, state) => GearDetailPage(
-                  gearId: state.pathParameters['gearId']!,
+                path: 'sets',
+                name: 'equipmentSets',
+                builder: (context, state) => const EquipmentSetListPage(),
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    name: 'newEquipmentSet',
+                    builder: (context, state) => const EquipmentSetEditPage(),
+                  ),
+                  GoRoute(
+                    path: ':setId',
+                    name: 'equipmentSetDetail',
+                    builder: (context, state) => EquipmentSetDetailPage(
+                      setId: state.pathParameters['setId']!,
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'edit',
+                        name: 'editEquipmentSet',
+                        builder: (context, state) => EquipmentSetEditPage(
+                          setId: state.pathParameters['setId'],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: ':equipmentId',
+                name: 'equipmentDetail',
+                builder: (context, state) => EquipmentDetailPage(
+                  equipmentId: state.pathParameters['equipmentId']!,
                 ),
                 routes: [
                   GoRoute(
                     path: 'edit',
-                    name: 'editGear',
-                    builder: (context, state) => GearEditPage(
-                      gearId: state.pathParameters['gearId'],
+                    name: 'editEquipment',
+                    builder: (context, state) => EquipmentEditPage(
+                      equipmentId: state.pathParameters['equipmentId'],
                     ),
                   ),
                 ],

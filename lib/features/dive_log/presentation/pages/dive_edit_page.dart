@@ -6,6 +6,12 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/enums.dart';
 import '../../../dive_sites/domain/entities/dive_site.dart';
 import '../../../dive_sites/presentation/providers/site_providers.dart';
+import '../../../equipment/domain/entities/equipment_item.dart';
+import '../../../equipment/domain/entities/equipment_set.dart';
+import '../../../equipment/presentation/providers/equipment_providers.dart';
+import '../../../equipment/presentation/providers/equipment_set_providers.dart';
+import '../../../marine_life/domain/entities/species.dart';
+import '../../../marine_life/presentation/providers/species_providers.dart';
 import '../../domain/entities/dive.dart';
 import '../providers/dive_providers.dart';
 
@@ -44,6 +50,8 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
   Visibility _selectedVisibility = Visibility.unknown;
   int _rating = 0;
   DiveSite? _selectedSite;
+  List<Sighting> _sightings = [];
+  List<EquipmentItem> _selectedEquipment = [];
 
   // Tank data
   final _tankVolumeController = TextEditingController(text: '12');
@@ -96,12 +104,26 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
             _endPressureController.text = tank.endPressure?.toString() ?? '50';
             _o2PercentController.text = tank.gasMix.o2.toString();
           }
+
+          // Load equipment
+          _selectedEquipment = List.from(dive.equipment);
         });
+        // Load existing sightings
+        _loadSightings();
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _loadSightings() async {
+    if (widget.diveId == null) return;
+    final repository = ref.read(speciesRepositoryProvider);
+    final sightings = await repository.getSightingsForDive(widget.diveId!);
+    if (mounted) {
+      setState(() => _sightings = sightings);
     }
   }
 
@@ -165,11 +187,15 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
             const SizedBox(height: 16),
             _buildTankSection(),
             const SizedBox(height: 16),
+            _buildEquipmentSection(),
+            const SizedBox(height: 16),
             _buildConditionsSection(),
             const SizedBox(height: 16),
             _buildBuddySection(),
             const SizedBox(height: 16),
             _buildRatingSection(),
+            const SizedBox(height: 16),
+            _buildSightingsSection(),
             const SizedBox(height: 16),
             _buildNotesSection(),
             const SizedBox(height: 32),
@@ -399,6 +425,205 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
     );
   }
 
+  Widget _buildEquipmentSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Equipment', style: Theme.of(context).textTheme.titleMedium),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _showEquipmentSetPicker,
+                      icon: const Icon(Icons.folder_special, size: 18),
+                      label: const Text('Use Set'),
+                    ),
+                    TextButton.icon(
+                      onPressed: _showEquipmentPicker,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (_selectedEquipment.isEmpty) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No equipment selected',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tap "Use Set" or "Add" to select equipment',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ] else ...[
+              const Divider(),
+              ...List.generate(_selectedEquipment.length, (index) {
+                final item = _selectedEquipment[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    child: Icon(
+                      _getEquipmentIcon(item.type),
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(item.name),
+                  subtitle: Text(item.type.displayName),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _selectedEquipment.removeAt(index);
+                      });
+                    },
+                  ),
+                );
+              }),
+              if (_selectedEquipment.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedEquipment.clear();
+                      });
+                    },
+                    child: const Text('Clear All'),
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getEquipmentIcon(EquipmentType type) {
+    switch (type) {
+      case EquipmentType.regulator:
+        return Icons.air;
+      case EquipmentType.bcd:
+        return Icons.checkroom;
+      case EquipmentType.wetsuit:
+        return Icons.dry_cleaning;
+      case EquipmentType.drysuit:
+        return Icons.dry_cleaning;
+      case EquipmentType.mask:
+        return Icons.visibility;
+      case EquipmentType.fins:
+        return Icons.water;
+      case EquipmentType.boots:
+        return Icons.hiking;
+      case EquipmentType.gloves:
+        return Icons.pan_tool;
+      case EquipmentType.hood:
+        return Icons.face;
+      case EquipmentType.tank:
+        return Icons.propane_tank;
+      case EquipmentType.weights:
+        return Icons.fitness_center;
+      case EquipmentType.computer:
+        return Icons.watch;
+      case EquipmentType.light:
+        return Icons.flashlight_on;
+      case EquipmentType.camera:
+        return Icons.camera_alt;
+      case EquipmentType.knife:
+        return Icons.content_cut;
+      case EquipmentType.smb:
+        return Icons.flag;
+      case EquipmentType.reel:
+        return Icons.all_inclusive;
+      case EquipmentType.other:
+        return Icons.build;
+    }
+  }
+
+  void _showEquipmentPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _EquipmentPickerSheet(
+          scrollController: scrollController,
+          selectedEquipmentIds: _selectedEquipment.map((e) => e.id).toSet(),
+          onEquipmentSelected: (equipment) {
+            setState(() {
+              // Add if not already selected
+              if (!_selectedEquipment.any((e) => e.id == equipment.id)) {
+                _selectedEquipment.add(equipment);
+              }
+            });
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showEquipmentSetPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _EquipmentSetPickerSheet(
+          scrollController: scrollController,
+          onSetSelected: (set, items) {
+            setState(() {
+              // Add all items from set that aren't already selected
+              for (final item in items) {
+                if (!_selectedEquipment.any((e) => e.id == item.id)) {
+                  _selectedEquipment.add(item);
+                }
+              }
+            });
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildConditionsSection() {
     return Card(
       child: Padding(
@@ -531,6 +756,211 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
     );
   }
 
+  Widget _buildSightingsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Marine Life', style: Theme.of(context).textTheme.titleMedium),
+                TextButton.icon(
+                  onPressed: _showSpeciesPicker,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            if (_sightings.isEmpty) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.water,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No marine life logged',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tap "Add" to record sightings',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ] else ...[
+              const Divider(),
+              ...List.generate(_sightings.length, (index) {
+                final sighting = _sightings[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: _getCategoryColor(sighting.speciesCategory),
+                    child: Icon(
+                      _getCategoryIcon(sighting.speciesCategory),
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(sighting.speciesName),
+                  subtitle: sighting.notes.isNotEmpty
+                      ? Text(sighting.notes, maxLines: 1, overflow: TextOverflow.ellipsis)
+                      : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (sighting.count > 1)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'x${sighting.count}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            _sightings.removeAt(index);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  onTap: () => _editSighting(index),
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getCategoryColor(SpeciesCategory? category) {
+    switch (category) {
+      case SpeciesCategory.fish:
+        return Colors.blue;
+      case SpeciesCategory.shark:
+        return Colors.grey.shade700;
+      case SpeciesCategory.ray:
+        return Colors.indigo;
+      case SpeciesCategory.mammal:
+        return Colors.brown;
+      case SpeciesCategory.turtle:
+        return Colors.green.shade700;
+      case SpeciesCategory.invertebrate:
+        return Colors.purple;
+      case SpeciesCategory.coral:
+        return Colors.pink;
+      case SpeciesCategory.plant:
+        return Colors.green;
+      case SpeciesCategory.other:
+      case null:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getCategoryIcon(SpeciesCategory? category) {
+    switch (category) {
+      case SpeciesCategory.fish:
+        return Icons.set_meal;
+      case SpeciesCategory.shark:
+        return Icons.water;
+      case SpeciesCategory.ray:
+        return Icons.water;
+      case SpeciesCategory.mammal:
+        return Icons.pets;
+      case SpeciesCategory.turtle:
+        return Icons.water;
+      case SpeciesCategory.invertebrate:
+        return Icons.bug_report;
+      case SpeciesCategory.coral:
+        return Icons.nature;
+      case SpeciesCategory.plant:
+        return Icons.eco;
+      case SpeciesCategory.other:
+      case null:
+        return Icons.water;
+    }
+  }
+
+  void _showSpeciesPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _SpeciesPickerSheet(
+          scrollController: scrollController,
+          onSpeciesSelected: (species, count, notes) {
+            setState(() {
+              _sightings.add(Sighting(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                diveId: widget.diveId ?? '',
+                speciesId: species.id,
+                speciesName: species.commonName,
+                speciesCategory: species.category,
+                count: count,
+                notes: notes,
+              ));
+            });
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+  }
+
+  void _editSighting(int index) {
+    final sighting = _sightings[index];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _EditSightingSheet(
+        sighting: sighting,
+        onSave: (updatedSighting) {
+          setState(() {
+            _sightings[index] = updatedSighting;
+          });
+          Navigator.of(context).pop();
+        },
+        onDelete: () {
+          setState(() {
+            _sightings.removeAt(index);
+          });
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
   Widget _buildNotesSection() {
     return Card(
       child: Padding(
@@ -653,14 +1083,34 @@ class _DiveEditPageState extends ConsumerState<DiveEditPage> {
         rating: _rating > 0 ? _rating : null,
         site: _selectedSite,
         tanks: tanks,
+        equipment: _selectedEquipment,
       );
 
       // Save using the notifier
       final notifier = ref.read(diveListNotifierProvider.notifier);
+      String? savedDiveId;
       if (widget.isEditing) {
         await notifier.updateDive(dive);
+        savedDiveId = widget.diveId;
       } else {
-        await notifier.addDive(dive);
+        final savedDive = await notifier.addDive(dive);
+        savedDiveId = savedDive.id;
+      }
+
+      // Save sightings
+      if (savedDiveId != null && _sightings.isNotEmpty) {
+        final speciesRepository = ref.read(speciesRepositoryProvider);
+        for (final sighting in _sightings) {
+          // Only save new sightings (those without a proper ID or for new dives)
+          if (!widget.isEditing || sighting.diveId.isEmpty) {
+            await speciesRepository.addSighting(
+              diveId: savedDiveId,
+              speciesId: sighting.speciesId,
+              count: sighting.count,
+              notes: sighting.notes,
+            );
+          }
+        }
       }
 
       if (mounted) {
@@ -789,6 +1239,757 @@ class _SitePickerSheet extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Species picker bottom sheet with search
+class _SpeciesPickerSheet extends ConsumerStatefulWidget {
+  final ScrollController scrollController;
+  final void Function(Species species, int count, String notes) onSpeciesSelected;
+
+  const _SpeciesPickerSheet({
+    required this.scrollController,
+    required this.onSpeciesSelected,
+  });
+
+  @override
+  ConsumerState<_SpeciesPickerSheet> createState() => _SpeciesPickerSheetState();
+}
+
+class _SpeciesPickerSheetState extends ConsumerState<_SpeciesPickerSheet> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+  SpeciesCategory? _selectedCategory;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final speciesAsync = _searchQuery.isEmpty && _selectedCategory == null
+        ? ref.watch(allSpeciesProvider)
+        : _selectedCategory != null
+            ? ref.watch(speciesByCategoryProvider(_selectedCategory!))
+            : ref.watch(speciesSearchProvider(_searchQuery));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Add Marine Life',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search species...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+                if (value.isNotEmpty) {
+                  _selectedCategory = null;
+                }
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _buildCategoryChip(null, 'All'),
+              ...SpeciesCategory.values.map((category) =>
+                _buildCategoryChip(category, category.displayName)),
+            ],
+          ),
+        ),
+        const Divider(height: 16),
+        Expanded(
+          child: speciesAsync.when(
+            data: (speciesList) {
+              if (speciesList.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.water,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'No species found'
+                            : 'No species available',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (_searchQuery.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        FilledButton.tonal(
+                          onPressed: () => _addCustomSpecies(_searchQuery),
+                          child: Text('Add "$_searchQuery" as new species'),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                controller: widget.scrollController,
+                itemCount: speciesList.length,
+                itemBuilder: (context, index) {
+                  final species = speciesList[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: _getCategoryColor(species.category),
+                      child: Icon(
+                        _getCategoryIcon(species.category),
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(species.commonName),
+                    subtitle: species.scientificName != null
+                        ? Text(
+                            species.scientificName!,
+                            style: const TextStyle(fontStyle: FontStyle.italic),
+                          )
+                        : null,
+                    trailing: Text(
+                      species.category.displayName,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    onTap: () => _showSightingDetails(species),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Text('Error loading species: $error'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryChip(SpeciesCategory? category, String label) {
+    final isSelected = _selectedCategory == category && _searchQuery.isEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          setState(() {
+            _selectedCategory = selected ? category : null;
+            if (selected) {
+              _searchController.clear();
+              _searchQuery = '';
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  Color _getCategoryColor(SpeciesCategory category) {
+    switch (category) {
+      case SpeciesCategory.fish:
+        return Colors.blue;
+      case SpeciesCategory.shark:
+        return Colors.grey.shade700;
+      case SpeciesCategory.ray:
+        return Colors.indigo;
+      case SpeciesCategory.mammal:
+        return Colors.brown;
+      case SpeciesCategory.turtle:
+        return Colors.green.shade700;
+      case SpeciesCategory.invertebrate:
+        return Colors.purple;
+      case SpeciesCategory.coral:
+        return Colors.pink;
+      case SpeciesCategory.plant:
+        return Colors.green;
+      case SpeciesCategory.other:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getCategoryIcon(SpeciesCategory category) {
+    switch (category) {
+      case SpeciesCategory.fish:
+        return Icons.set_meal;
+      case SpeciesCategory.shark:
+        return Icons.water;
+      case SpeciesCategory.ray:
+        return Icons.water;
+      case SpeciesCategory.mammal:
+        return Icons.pets;
+      case SpeciesCategory.turtle:
+        return Icons.water;
+      case SpeciesCategory.invertebrate:
+        return Icons.bug_report;
+      case SpeciesCategory.coral:
+        return Icons.nature;
+      case SpeciesCategory.plant:
+        return Icons.eco;
+      case SpeciesCategory.other:
+        return Icons.water;
+    }
+  }
+
+  void _showSightingDetails(Species species) {
+    int count = 1;
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(species.commonName),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: count > 1
+                        ? () => setDialogState(() => count--)
+                        : null,
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).colorScheme.outline),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: () => setDialogState(() => count++),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  hintText: 'e.g., size, behavior, location...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                widget.onSpeciesSelected(species, count, notesController.text);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addCustomSpecies(String name) async {
+    final repository = ref.read(speciesRepositoryProvider);
+    final species = await repository.getOrCreateSpecies(
+      commonName: name,
+      category: SpeciesCategory.other,
+    );
+    if (mounted) {
+      _showSightingDetails(species);
+    }
+  }
+}
+
+/// Edit sighting sheet
+class _EditSightingSheet extends StatefulWidget {
+  final Sighting sighting;
+  final void Function(Sighting) onSave;
+  final VoidCallback onDelete;
+
+  const _EditSightingSheet({
+    required this.sighting,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  State<_EditSightingSheet> createState() => _EditSightingSheetState();
+}
+
+class _EditSightingSheetState extends State<_EditSightingSheet> {
+  late int _count;
+  late TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _count = widget.sighting.count;
+    _notesController = TextEditingController(text: widget.sighting.notes);
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                widget.sighting.speciesName,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Remove Sighting?'),
+                      content: Text(
+                        'Remove ${widget.sighting.speciesName} from this dive?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                            widget.onDelete();
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                          ),
+                          child: const Text('Remove'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Count',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton.filled(
+                icon: const Icon(Icons.remove),
+                onPressed: _count > 1 ? () => setState(() => _count--) : null,
+              ),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).colorScheme.outline),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$_count',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ),
+              IconButton.filled(
+                icon: const Icon(Icons.add),
+                onPressed: () => setState(() => _count++),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _notesController,
+            decoration: const InputDecoration(
+              labelText: 'Notes',
+              hintText: 'Size, behavior, location...',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: () {
+              widget.onSave(widget.sighting.copyWith(
+                count: _count,
+                notes: _notesController.text,
+              ));
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Equipment picker bottom sheet
+class _EquipmentPickerSheet extends ConsumerWidget {
+  final ScrollController scrollController;
+  final Set<String> selectedEquipmentIds;
+  final void Function(EquipmentItem) onEquipmentSelected;
+
+  const _EquipmentPickerSheet({
+    required this.scrollController,
+    required this.selectedEquipmentIds,
+    required this.onEquipmentSelected,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final equipmentAsync = ref.watch(allEquipmentProvider);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Add Equipment',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: equipmentAsync.when(
+            data: (equipmentList) {
+              // Filter out already selected equipment
+              final available = equipmentList
+                  .where((e) => !selectedEquipmentIds.contains(e.id))
+                  .toList();
+
+              if (available.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        equipmentList.isEmpty
+                            ? 'No equipment yet'
+                            : 'All equipment already selected',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        equipmentList.isEmpty
+                            ? 'Add equipment from the Equipment tab'
+                            : 'Remove items to add different ones',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                controller: scrollController,
+                itemCount: available.length,
+                itemBuilder: (context, index) {
+                  final equipment = available[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Icon(
+                        _getEquipmentIcon(equipment.type),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    title: Text(equipment.name),
+                    subtitle: Text(equipment.type.displayName),
+                    onTap: () => onEquipmentSelected(equipment),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Text('Error loading equipment: $error'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getEquipmentIcon(EquipmentType type) {
+    switch (type) {
+      case EquipmentType.regulator:
+        return Icons.air;
+      case EquipmentType.bcd:
+        return Icons.checkroom;
+      case EquipmentType.wetsuit:
+      case EquipmentType.drysuit:
+        return Icons.dry_cleaning;
+      case EquipmentType.mask:
+        return Icons.visibility;
+      case EquipmentType.fins:
+        return Icons.water;
+      case EquipmentType.boots:
+        return Icons.hiking;
+      case EquipmentType.gloves:
+        return Icons.pan_tool;
+      case EquipmentType.hood:
+        return Icons.face;
+      case EquipmentType.tank:
+        return Icons.propane_tank;
+      case EquipmentType.weights:
+        return Icons.fitness_center;
+      case EquipmentType.computer:
+        return Icons.watch;
+      case EquipmentType.light:
+        return Icons.flashlight_on;
+      case EquipmentType.camera:
+        return Icons.camera_alt;
+      case EquipmentType.knife:
+        return Icons.content_cut;
+      case EquipmentType.smb:
+        return Icons.flag;
+      case EquipmentType.reel:
+        return Icons.all_inclusive;
+      case EquipmentType.other:
+        return Icons.build;
+    }
+  }
+}
+
+/// Equipment set picker bottom sheet
+class _EquipmentSetPickerSheet extends ConsumerWidget {
+  final ScrollController scrollController;
+  final void Function(EquipmentSet set, List<EquipmentItem> items) onSetSelected;
+
+  const _EquipmentSetPickerSheet({
+    required this.scrollController,
+    required this.onSetSelected,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final setsAsync = ref.watch(equipmentSetsProvider);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Use Equipment Set',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: setsAsync.when(
+            data: (sets) {
+              if (sets.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.folder_special_outlined,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No equipment sets yet',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Create sets in Equipment > Sets',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                controller: scrollController,
+                itemCount: sets.length,
+                itemBuilder: (context, index) {
+                  final set = sets[index];
+                  return _EquipmentSetTile(
+                    set: set,
+                    onTap: (items) => onSetSelected(set, items),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Text('Error loading equipment sets: $error'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Individual equipment set tile that loads its items
+class _EquipmentSetTile extends ConsumerWidget {
+  final EquipmentSet set;
+  final void Function(List<EquipmentItem> items) onTap;
+
+  const _EquipmentSetTile({
+    required this.set,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final setWithItemsAsync = ref.watch(equipmentSetWithItemsProvider(set.id));
+
+    return setWithItemsAsync.when(
+      data: (setWithItems) {
+        if (setWithItems == null) {
+          return const SizedBox.shrink();
+        }
+        final items = setWithItems.items ?? [];
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            child: Icon(
+              Icons.folder_special,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+          ),
+          title: Text(set.name),
+          subtitle: Text(
+            items.isEmpty
+                ? 'Empty set'
+                : '${items.length} item${items.length == 1 ? '' : 's'}: ${items.map((e) => e.name).join(', ')}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: items.isEmpty ? null : () => onTap(items),
+        );
+      },
+      loading: () => ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+        title: Text(set.name),
+        subtitle: const Text('Loading...'),
+      ),
+      error: (_, __) => ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
+          child: Icon(
+            Icons.error_outline,
+            color: Theme.of(context).colorScheme.onErrorContainer,
+          ),
+        ),
+        title: Text(set.name),
+        subtitle: const Text('Error loading items'),
+      ),
     );
   }
 }

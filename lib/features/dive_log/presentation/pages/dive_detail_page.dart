@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/constants/enums.dart';
+import '../../../marine_life/domain/entities/species.dart';
+import '../../../marine_life/presentation/providers/species_providers.dart';
+import '../../../settings/presentation/providers/export_providers.dart';
 import '../../domain/entities/dive.dart';
 import '../providers/dive_providers.dart';
 import '../widgets/dive_profile_chart.dart';
@@ -64,9 +68,7 @@ class DiveDetailPage extends ConsumerWidget {
             onSelected: (value) {
               switch (value) {
                 case 'export':
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Export coming soon')),
-                  );
+                  _showExportOptions(context, ref, dive);
                   break;
                 case 'delete':
                   _showDeleteConfirmation(context, ref);
@@ -111,6 +113,8 @@ class DiveDetailPage extends ConsumerWidget {
               _buildTanksSection(context, dive),
               const SizedBox(height: 24),
             ],
+            _buildSightingsSection(context, ref),
+            const SizedBox(height: 24),
             _buildNotesSection(context, dive),
             const SizedBox(height: 32),
           ],
@@ -327,6 +331,159 @@ class DiveDetailPage extends ConsumerWidget {
     );
   }
 
+  Widget _buildSightingsSection(BuildContext context, WidgetRef ref) {
+    final sightingsAsync = ref.watch(diveSightingsProvider(diveId));
+
+    return sightingsAsync.when(
+      data: (sightings) {
+        if (sightings.isEmpty) {
+          return const SizedBox.shrink(); // Don't show section if no sightings
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Marine Life',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      '${sightings.length} species',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                ...sightings.map((sighting) => _buildSightingTile(context, sighting)),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const Card(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildSightingTile(BuildContext context, Sighting sighting) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: _getCategoryColor(sighting.speciesCategory),
+            child: Icon(
+              _getCategoryIcon(sighting.speciesCategory),
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sighting.speciesName,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+                if (sighting.notes.isNotEmpty)
+                  Text(
+                    sighting.notes,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (sighting.count > 1)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'x${sighting.count}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _getCategoryColor(SpeciesCategory? category) {
+    switch (category) {
+      case SpeciesCategory.fish:
+        return Colors.blue;
+      case SpeciesCategory.shark:
+        return Colors.grey.shade700;
+      case SpeciesCategory.ray:
+        return Colors.indigo;
+      case SpeciesCategory.mammal:
+        return Colors.brown;
+      case SpeciesCategory.turtle:
+        return Colors.green.shade700;
+      case SpeciesCategory.invertebrate:
+        return Colors.purple;
+      case SpeciesCategory.coral:
+        return Colors.pink;
+      case SpeciesCategory.plant:
+        return Colors.green;
+      case SpeciesCategory.other:
+      case null:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getCategoryIcon(SpeciesCategory? category) {
+    switch (category) {
+      case SpeciesCategory.fish:
+        return Icons.set_meal;
+      case SpeciesCategory.shark:
+        return Icons.water;
+      case SpeciesCategory.ray:
+        return Icons.water;
+      case SpeciesCategory.mammal:
+        return Icons.pets;
+      case SpeciesCategory.turtle:
+        return Icons.water;
+      case SpeciesCategory.invertebrate:
+        return Icons.bug_report;
+      case SpeciesCategory.coral:
+        return Icons.nature;
+      case SpeciesCategory.plant:
+        return Icons.eco;
+      case SpeciesCategory.other:
+      case null:
+        return Icons.water;
+    }
+  }
+
   Widget _buildNotesSection(BuildContext context, Dive dive) {
     return Card(
       child: Padding(
@@ -383,5 +540,112 @@ class DiveDetailPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _showExportOptions(BuildContext context, WidgetRef ref, Dive dive) {
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Export Dive #${dive.diveNumber ?? ""}',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('PDF Logbook Entry'),
+              subtitle: const Text('Printable dive log page'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleSingleDiveExport(
+                  context,
+                  ref,
+                  () => ref.read(exportServiceProvider).exportDivesToPdf([dive]),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text('CSV'),
+              subtitle: const Text('Spreadsheet format'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleSingleDiveExport(
+                  context,
+                  ref,
+                  () => ref.read(exportServiceProvider).exportDivesToCsv([dive]),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.code),
+              title: const Text('UDDF'),
+              subtitle: const Text('Universal Dive Data Format'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _handleSingleDiveExport(
+                  context,
+                  ref,
+                  () => ref.read(exportServiceProvider).exportDivesToUddf(
+                    [dive],
+                    sites: dive.site != null ? [dive.site!] : [],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleSingleDiveExport(
+    BuildContext context,
+    WidgetRef ref,
+    Future<String> Function() exportFn,
+  ) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Text('Exporting...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await exportFn();
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dive exported successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

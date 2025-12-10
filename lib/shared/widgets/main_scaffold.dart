@@ -13,7 +13,7 @@ class MainScaffold extends StatelessWidget {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/dives')) return 0;
     if (location.startsWith('/sites')) return 1;
-    if (location.startsWith('/gear')) return 2;
+    if (location.startsWith('/equipment')) return 2;
     if (location.startsWith('/statistics')) return 3;
     if (location.startsWith('/settings')) return 4;
     return 0;
@@ -28,7 +28,7 @@ class MainScaffold extends StatelessWidget {
         context.go('/sites');
         break;
       case 2:
-        context.go('/gear');
+        context.go('/equipment');
         break;
       case 3:
         context.go('/statistics');
@@ -76,7 +76,7 @@ class MainScaffold extends StatelessWidget {
                 NavigationRailDestination(
                   icon: Icon(Icons.inventory_2_outlined),
                   selectedIcon: Icon(Icons.inventory_2),
-                  label: Text('Gear'),
+                  label: Text('Equipment'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.bar_chart_outlined),
@@ -118,7 +118,7 @@ class MainScaffold extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),
             selectedIcon: Icon(Icons.inventory_2),
-            label: 'Gear',
+            label: 'Equipment',
           ),
           NavigationDestination(
             icon: Icon(Icons.bar_chart_outlined),

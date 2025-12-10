@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -144,6 +145,11 @@ class StatisticsPage extends ConsumerWidget {
   }
 
   Widget _buildDivesByMonthChart(BuildContext context, DiveStatistics stats) {
+    final hasData = stats.divesByMonth.isNotEmpty;
+    final maxCount = hasData
+        ? stats.divesByMonth.map((e) => e.count).reduce((a, b) => a > b ? a : b).toDouble()
+        : 5.0;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -155,43 +161,110 @@ class StatisticsPage extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            Container(
+            SizedBox(
               height: 200,
-              alignment: Alignment.center,
-              child: stats.totalDives > 0
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bar_chart,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+              child: hasData
+                  ? BarChart(
+                      BarChartData(
+                        alignment: BarChartAlignment.spaceAround,
+                        maxY: maxCount + 1,
+                        barTouchData: BarTouchData(
+                          touchTooltipData: BarTouchTooltipData(
+                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                              final data = stats.divesByMonth[groupIndex];
+                              return BarTooltipItem(
+                                '${data.fullLabel}\n${data.count} dives',
+                                TextStyle(
+                                  color: Theme.of(context).colorScheme.onPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Chart visualization coming soon',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        titlesData: FlTitlesData(
+                          show: true,
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                final index = value.toInt();
+                                if (index >= 0 && index < stats.divesByMonth.length) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      stats.divesByMonth[index].label,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  );
+                                }
+                                return const Text('');
+                              },
+                              reservedSize: 30,
+                            ),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 30,
+                              getTitlesWidget: (value, meta) {
+                                if (value == value.roundToDouble()) {
+                                  return Text(
+                                    value.toInt().toString(),
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  );
+                                }
+                                return const Text('');
+                              },
+                            ),
+                          ),
+                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: 1,
+                          getDrawingHorizontalLine: (value) => FlLine(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                            strokeWidth: 1,
+                          ),
+                        ),
+                        barGroups: List.generate(
+                          stats.divesByMonth.length,
+                          (index) => BarChartGroupData(
+                            x: index,
+                            barRods: [
+                              BarChartRodData(
+                                toY: stats.divesByMonth[index].count.toDouble(),
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 16,
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                               ),
+                            ],
+                          ),
                         ),
-                      ],
+                      ),
                     )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bar_chart,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Chart will appear when you log dives',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                      ],
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.bar_chart,
+                            size: 48,
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Chart will appear when you log dives',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
                     ),
             ),
           ],
@@ -201,6 +274,15 @@ class StatisticsPage extends ConsumerWidget {
   }
 
   Widget _buildDepthDistribution(BuildContext context, DiveStatistics stats) {
+    final hasData = stats.depthDistribution.any((d) => d.count > 0);
+    final colors = [
+      Colors.lightBlue.shade300,
+      Colors.blue.shade400,
+      Colors.blue.shade600,
+      Colors.indigo.shade600,
+      Colors.indigo.shade900,
+    ];
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -212,93 +294,245 @@ class StatisticsPage extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            Container(
+            SizedBox(
               height: 200,
-              alignment: Alignment.center,
-              child: stats.totalDives > 0
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+              child: hasData
+                  ? Row(
                       children: [
-                        Icon(
-                          Icons.pie_chart,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                        Expanded(
+                          flex: 2,
+                          child: PieChart(
+                            PieChartData(
+                              sectionsSpace: 2,
+                              centerSpaceRadius: 30,
+                              sections: List.generate(
+                                stats.depthDistribution.length,
+                                (index) {
+                                  final data = stats.depthDistribution[index];
+                                  if (data.count == 0) return null;
+                                  return PieChartSectionData(
+                                    value: data.count.toDouble(),
+                                    title: '${data.count}',
+                                    color: colors[index % colors.length],
+                                    radius: 60,
+                                    titleStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  );
+                                },
+                              ).whereType<PieChartSectionData>().toList(),
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Avg Max Depth: ${stats.avgMaxDepth.toStringAsFixed(1)}m',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 1,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: List.generate(
+                              stats.depthDistribution.length,
+                              (index) {
+                                final data = stats.depthDistribution[index];
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: colors[index % colors.length],
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          data.label,
+                                          style: Theme.of(context).textTheme.bodySmall,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
-                        if (stats.avgTemperature != null)
+                      ],
+                    )
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.pie_chart,
+                            size: 48,
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(height: 8),
                           Text(
-                            'Avg Water Temp: ${stats.avgTemperature!.toStringAsFixed(1)}°C',
+                            'Chart will appear when you log dives',
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                           ),
-                      ],
-                    )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.pie_chart,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Chart will appear when you log dives',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
             ),
+            if (hasData) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildMiniStat(context, 'Avg Depth', '${stats.avgMaxDepth.toStringAsFixed(1)}m'),
+                  if (stats.avgTemperature != null)
+                    _buildMiniStat(context, 'Avg Temp', '${stats.avgTemperature!.toStringAsFixed(1)}°C'),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
+  Widget _buildMiniStat(BuildContext context, String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTopSites(BuildContext context, DiveStatistics stats) {
+    final hasData = stats.topSites.isNotEmpty;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Top Dive Sites',
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Top Dive Sites',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (stats.totalSites > 0)
+                  Text(
+                    '${stats.totalSites} total',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+              ],
             ),
             const Divider(),
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.location_on,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      stats.totalSites > 0
-                          ? '${stats.totalSites} sites visited'
-                          : 'No dive sites yet',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
+            if (hasData)
+              ...stats.topSites.asMap().entries.map((entry) {
+                final index = entry.key;
+                final site = entry.value;
+                return _buildSiteRankTile(context, index + 1, site.siteName, site.diveCount);
+              })
+            else
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No dive sites yet',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSiteRankTile(BuildContext context, int rank, String siteName, int diveCount) {
+    final rankColors = [
+      Colors.amber.shade600,
+      Colors.grey.shade400,
+      Colors.brown.shade400,
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: rank <= 3 ? rankColors[rank - 1] : Theme.of(context).colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$rank',
+                style: TextStyle(
+                  color: rank <= 3 ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              siteName,
+              style: Theme.of(context).textTheme.bodyMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$diveCount dives',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

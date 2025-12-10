@@ -6,6 +6,7 @@ import '../../../../core/database/database.dart';
 import '../../../../core/services/database_service.dart';
 import '../../domain/entities/dive.dart' as domain;
 import '../../../dive_sites/domain/entities/dive_site.dart' as domain;
+import '../../../equipment/domain/entities/equipment_item.dart';
 
 class DiveRepository {
   final AppDatabase _db = DatabaseService.instance.database;
@@ -87,6 +88,14 @@ class DiveRepository {
       ));
     }
 
+    // Insert equipment associations
+    for (final item in dive.equipment) {
+      await _db.into(_db.diveEquipment).insert(DiveEquipmentCompanion(
+        diveId: Value(id),
+        equipmentId: Value(item.id),
+      ));
+    }
+
     return dive.copyWith(id: id);
   }
 
@@ -126,6 +135,15 @@ class DiveRepository {
         o2Percent: Value(tank.gasMix.o2),
         hePercent: Value(tank.gasMix.he),
         tankOrder: Value(tank.order),
+      ));
+    }
+
+    // Update equipment: delete and re-insert
+    await (_db.delete(_db.diveEquipment)..where((t) => t.diveId.equals(dive.id))).go();
+    for (final item in dive.equipment) {
+      await _db.into(_db.diveEquipment).insert(DiveEquipmentCompanion(
+        diveId: Value(dive.id),
+        equipmentId: Value(item.id),
       ));
     }
   }
@@ -188,6 +206,7 @@ class DiveRepository {
   // ============================================================================
 
   Future<DiveStatistics> getStatistics() async {
+    // Basic stats
     final stats = await _db.customSelect('''
       SELECT
         COUNT(*) as total_dives,
@@ -199,6 +218,83 @@ class DiveRepository {
       FROM dives
     ''').getSingle();
 
+    // Dives by month (last 12 months)
+    final monthlyStats = await _db.customSelect('''
+      SELECT
+        strftime('%Y', dive_date_time / 1000, 'unixepoch') as year,
+        strftime('%m', dive_date_time / 1000, 'unixepoch') as month,
+        COUNT(*) as count
+      FROM dives
+      WHERE dive_date_time >= strftime('%s', 'now', '-12 months') * 1000
+      GROUP BY year, month
+      ORDER BY year, month
+    ''').get();
+
+    final divesByMonth = monthlyStats.map((row) => MonthlyDiveCount(
+      year: int.parse(row.data['year'] as String),
+      month: int.parse(row.data['month'] as String),
+      count: row.data['count'] as int,
+    )).toList();
+
+    // Depth distribution
+    final depthStats = await _db.customSelect('''
+      SELECT
+        CASE
+          WHEN max_depth < 10 THEN '0-10m'
+          WHEN max_depth < 20 THEN '10-20m'
+          WHEN max_depth < 30 THEN '20-30m'
+          WHEN max_depth < 40 THEN '30-40m'
+          ELSE '40m+'
+        END as depth_range,
+        COUNT(*) as count
+      FROM dives
+      WHERE max_depth IS NOT NULL
+      GROUP BY depth_range
+      ORDER BY
+        CASE depth_range
+          WHEN '0-10m' THEN 1
+          WHEN '10-20m' THEN 2
+          WHEN '20-30m' THEN 3
+          WHEN '30-40m' THEN 4
+          ELSE 5
+        END
+    ''').get();
+
+    final depthRanges = [
+      DepthRangeStat(label: '0-10m', minDepth: 0, maxDepth: 10, count: 0),
+      DepthRangeStat(label: '10-20m', minDepth: 10, maxDepth: 20, count: 0),
+      DepthRangeStat(label: '20-30m', minDepth: 20, maxDepth: 30, count: 0),
+      DepthRangeStat(label: '30-40m', minDepth: 30, maxDepth: 40, count: 0),
+      DepthRangeStat(label: '40m+', minDepth: 40, maxDepth: 100, count: 0),
+    ];
+
+    final depthDistribution = depthRanges.map((range) {
+      final found = depthStats.where((row) => row.data['depth_range'] == range.label);
+      return DepthRangeStat(
+        label: range.label,
+        minDepth: range.minDepth,
+        maxDepth: range.maxDepth,
+        count: found.isNotEmpty ? found.first.data['count'] as int : 0,
+      );
+    }).toList();
+
+    // Top sites
+    final siteStats = await _db.customSelect('''
+      SELECT
+        s.name as site_name,
+        COUNT(*) as dive_count
+      FROM dives d
+      INNER JOIN dive_sites s ON d.site_id = s.id
+      GROUP BY d.site_id
+      ORDER BY dive_count DESC
+      LIMIT 5
+    ''').get();
+
+    final topSites = siteStats.map((row) => TopSiteStat(
+      siteName: row.data['site_name'] as String,
+      diveCount: row.data['dive_count'] as int,
+    )).toList();
+
     return DiveStatistics(
       totalDives: stats.data['total_dives'] as int? ?? 0,
       totalTimeSeconds: stats.data['total_time'] as int? ?? 0,
@@ -206,6 +302,9 @@ class DiveRepository {
       avgMaxDepth: stats.data['avg_max_depth'] as double? ?? 0,
       avgTemperature: stats.data['avg_temp'] as double?,
       totalSites: stats.data['total_sites'] as int? ?? 0,
+      divesByMonth: divesByMonth,
+      depthDistribution: depthDistribution,
+      topSites: topSites,
     );
   }
 
@@ -225,6 +324,35 @@ class DiveRepository {
       ..where((t) => t.diveId.equals(row.id))
       ..orderBy([(t) => OrderingTerm.asc(t.timestamp)]);
     final profileRows = await profileQuery.get();
+
+    // Get equipment for this dive
+    final equipmentQuery = _db.select(_db.diveEquipment).join([
+      innerJoin(_db.equipment, _db.equipment.id.equalsExp(_db.diveEquipment.equipmentId)),
+    ])..where(_db.diveEquipment.diveId.equals(row.id));
+    final equipmentRows = await equipmentQuery.get();
+    final equipmentItems = equipmentRows.map((joinRow) {
+      final e = joinRow.readTable(_db.equipment);
+      return EquipmentItem(
+        id: e.id,
+        name: e.name,
+        type: EquipmentType.values.firstWhere(
+          (t) => t.name == e.type,
+          orElse: () => EquipmentType.other,
+        ),
+        brand: e.brand,
+        model: e.model,
+        serialNumber: e.serialNumber,
+        purchaseDate: e.purchaseDate != null
+            ? DateTime.fromMillisecondsSinceEpoch(e.purchaseDate!)
+            : null,
+        lastServiceDate: e.lastServiceDate != null
+            ? DateTime.fromMillisecondsSinceEpoch(e.lastServiceDate!)
+            : null,
+        serviceIntervalDays: e.serviceIntervalDays,
+        notes: e.notes,
+        isActive: e.isActive,
+      );
+    }).toList();
 
     // Get site if exists
     domain.DiveSite? site;
@@ -288,6 +416,7 @@ class DiveRepository {
         temperature: p.temperature,
         heartRate: p.heartRate,
       )).toList(),
+      equipment: equipmentItems,
     );
   }
 }
@@ -300,6 +429,9 @@ class DiveStatistics {
   final double avgMaxDepth;
   final double? avgTemperature;
   final int totalSites;
+  final List<MonthlyDiveCount> divesByMonth;
+  final List<DepthRangeStat> depthDistribution;
+  final List<TopSiteStat> topSites;
 
   DiveStatistics({
     required this.totalDives,
@@ -308,6 +440,9 @@ class DiveStatistics {
     required this.avgMaxDepth,
     this.avgTemperature,
     required this.totalSites,
+    this.divesByMonth = const [],
+    this.depthDistribution = const [],
+    this.topSites = const [],
   });
 
   Duration get totalTime => Duration(seconds: totalTimeSeconds);
@@ -317,4 +452,43 @@ class DiveStatistics {
     final minutes = totalTime.inMinutes % 60;
     return '${hours}h ${minutes}m';
   }
+}
+
+/// Monthly dive count for bar chart
+class MonthlyDiveCount {
+  final int year;
+  final int month;
+  final int count;
+
+  MonthlyDiveCount({required this.year, required this.month, required this.count});
+
+  String get label {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
+  String get fullLabel => '$label $year';
+}
+
+/// Depth range statistics for distribution chart
+class DepthRangeStat {
+  final String label;
+  final int minDepth;
+  final int maxDepth;
+  final int count;
+
+  DepthRangeStat({
+    required this.label,
+    required this.minDepth,
+    required this.maxDepth,
+    required this.count,
+  });
+}
+
+/// Top dive site statistics
+class TopSiteStat {
+  final String siteName;
+  final int diveCount;
+
+  TopSiteStat({required this.siteName, required this.diveCount});
 }

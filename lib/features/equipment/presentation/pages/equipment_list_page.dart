@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/enums.dart';
-import '../../domain/entities/gear_item.dart';
-import '../providers/gear_providers.dart';
+import '../../domain/entities/equipment_item.dart';
+import '../providers/equipment_providers.dart';
 
-class GearListPage extends ConsumerWidget {
-  const GearListPage({super.key});
+class EquipmentListPage extends ConsumerWidget {
+  const EquipmentListPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -15,7 +15,7 @@ class GearListPage extends ConsumerWidget {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Gear'),
+          title: const Text('Equipment'),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Active'),
@@ -24,11 +24,16 @@ class GearListPage extends ConsumerWidget {
           ),
           actions: [
             IconButton(
+              icon: const Icon(Icons.folder_outlined),
+              tooltip: 'Equipment Sets',
+              onPressed: () => context.push('/equipment/sets'),
+            ),
+            IconButton(
               icon: const Icon(Icons.search),
               onPressed: () {
                 showSearch(
                   context: context,
-                  delegate: GearSearchDelegate(ref),
+                  delegate: EquipmentSearchDelegate(ref),
                 );
               },
             ),
@@ -36,39 +41,39 @@ class GearListPage extends ConsumerWidget {
         ),
         body: TabBarView(
           children: [
-            _ActiveGearTab(),
-            _RetiredGearTab(),
+            _ActiveEquipmentTab(),
+            _RetiredEquipmentTab(),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () {
-            _showAddGearDialog(context, ref);
+            _showAddEquipmentDialog(context, ref);
           },
           icon: const Icon(Icons.add),
-          label: const Text('Add Gear'),
+          label: const Text('Add Equipment'),
         ),
       ),
     );
   }
 
-  void _showAddGearDialog(BuildContext context, WidgetRef ref) {
+  void _showAddEquipmentDialog(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => AddGearSheet(ref: ref),
+      builder: (context) => AddEquipmentSheet(ref: ref),
     );
   }
 }
 
-class _ActiveGearTab extends ConsumerWidget {
+class _ActiveEquipmentTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final gearAsync = ref.watch(gearListNotifierProvider);
+    final equipmentAsync = ref.watch(equipmentListNotifierProvider);
 
-    return gearAsync.when(
-      data: (gear) => gear.isEmpty
+    return equipmentAsync.when(
+      data: (equipment) => equipment.isEmpty
           ? _buildEmptyState(context, ref)
-          : _buildGearList(context, ref, gear),
+          : _buildEquipmentList(context, ref, equipment),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Center(
         child: Column(
@@ -76,10 +81,10 @@ class _ActiveGearTab extends ConsumerWidget {
           children: [
             const Icon(Icons.error_outline, size: 48, color: Colors.red),
             const SizedBox(height: 16),
-            Text('Error loading gear: $error'),
+            Text('Error loading equipment: $error'),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => ref.read(gearListNotifierProvider.notifier).refresh(),
+              onPressed: () => ref.read(equipmentListNotifierProvider.notifier).refresh(),
               child: const Text('Retry'),
             ),
           ],
@@ -88,23 +93,23 @@ class _ActiveGearTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildGearList(BuildContext context, WidgetRef ref, List<GearItem> gear) {
+  Widget _buildEquipmentList(BuildContext context, WidgetRef ref, List<EquipmentItem> equipment) {
     return RefreshIndicator(
       onRefresh: () async {
-        await ref.read(gearListNotifierProvider.notifier).refresh();
+        await ref.read(equipmentListNotifierProvider.notifier).refresh();
       },
       child: ListView.builder(
         padding: const EdgeInsets.only(bottom: 80),
-        itemCount: gear.length,
+        itemCount: equipment.length,
         itemBuilder: (context, index) {
-          final item = gear[index];
-          return GearListTile(
+          final item = equipment[index];
+          return EquipmentListTile(
             name: item.name,
             type: item.type,
             brandModel: item.fullName != item.name ? item.fullName : null,
             isServiceDue: item.isServiceDue,
             daysUntilService: item.daysUntilService,
-            onTap: () => context.push('/gear/${item.id}'),
+            onTap: () => context.push('/equipment/${item.id}'),
           );
         },
       ),
@@ -123,7 +128,7 @@ class _ActiveGearTab extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No gear added yet',
+            'No equipment added yet',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
@@ -140,11 +145,11 @@ class _ActiveGearTab extends ConsumerWidget {
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
-                builder: (context) => AddGearSheet(ref: ref),
+                builder: (context) => AddEquipmentSheet(ref: ref),
               );
             },
             icon: const Icon(Icons.add),
-            label: const Text('Add Your First Gear'),
+            label: const Text('Add Your First Equipment'),
           ),
         ],
       ),
@@ -152,15 +157,15 @@ class _ActiveGearTab extends ConsumerWidget {
   }
 }
 
-class _RetiredGearTab extends ConsumerWidget {
+class _RetiredEquipmentTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final retiredAsync = ref.watch(retiredGearProvider);
+    final retiredAsync = ref.watch(retiredEquipmentProvider);
 
     return retiredAsync.when(
-      data: (gear) => gear.isEmpty
+      data: (equipment) => equipment.isEmpty
           ? _buildEmptyState(context)
-          : _buildGearList(context, ref, gear),
+          : _buildEquipmentList(context, ref, equipment),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Center(
         child: Column(
@@ -175,18 +180,18 @@ class _RetiredGearTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildGearList(BuildContext context, WidgetRef ref, List<GearItem> gear) {
+  Widget _buildEquipmentList(BuildContext context, WidgetRef ref, List<EquipmentItem> equipment) {
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 80),
-      itemCount: gear.length,
+      itemCount: equipment.length,
       itemBuilder: (context, index) {
-        final item = gear[index];
-        return GearListTile(
+        final item = equipment[index];
+        return EquipmentListTile(
           name: item.name,
           type: item.type,
           brandModel: item.fullName != item.name ? item.fullName : null,
           isServiceDue: false,
-          onTap: () => context.push('/gear/${item.id}'),
+          onTap: () => context.push('/equipment/${item.id}'),
         );
       },
     );
@@ -204,12 +209,12 @@ class _RetiredGearTab extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No retired gear',
+            'No retired equipment',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
           Text(
-            'Retired gear will appear here',
+            'Retired equipment will appear here',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -221,23 +226,23 @@ class _RetiredGearTab extends ConsumerWidget {
   }
 }
 
-class AddGearSheet extends ConsumerStatefulWidget {
+class AddEquipmentSheet extends ConsumerStatefulWidget {
   final WidgetRef ref;
 
-  const AddGearSheet({super.key, required this.ref});
+  const AddEquipmentSheet({super.key, required this.ref});
 
   @override
-  ConsumerState<AddGearSheet> createState() => _AddGearSheetState();
+  ConsumerState<AddEquipmentSheet> createState() => _AddEquipmentSheetState();
 }
 
-class _AddGearSheetState extends ConsumerState<AddGearSheet> {
+class _AddEquipmentSheetState extends ConsumerState<AddEquipmentSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
   final _modelController = TextEditingController();
   final _serialController = TextEditingController();
 
-  GearType _selectedType = GearType.regulator;
+  EquipmentType _selectedType = EquipmentType.regulator;
   bool _isSaving = false;
 
   @override
@@ -271,7 +276,7 @@ class _AddGearSheetState extends ConsumerState<AddGearSheet> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Add Gear',
+                      'Add Equipment',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     IconButton(
@@ -281,13 +286,13 @@ class _AddGearSheetState extends ConsumerState<AddGearSheet> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<GearType>(
+                DropdownButtonFormField<EquipmentType>(
                   value: _selectedType,
                   decoration: const InputDecoration(
                     labelText: 'Type',
                     prefixIcon: Icon(Icons.category),
                   ),
-                  items: GearType.values.map((type) {
+                  items: EquipmentType.values.map((type) {
                     return DropdownMenuItem(
                       value: type,
                       child: Text(type.displayName),
@@ -342,14 +347,14 @@ class _AddGearSheetState extends ConsumerState<AddGearSheet> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed: _isSaving ? null : _saveGear,
+                  onPressed: _isSaving ? null : _saveEquipment,
                   child: _isSaving
                       ? const SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Add Gear'),
+                      : const Text('Add Equipment'),
                 ),
               ],
             ),
@@ -359,13 +364,13 @@ class _AddGearSheetState extends ConsumerState<AddGearSheet> {
     );
   }
 
-  Future<void> _saveGear() async {
+  Future<void> _saveEquipment() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
 
     try {
-      final gear = GearItem(
+      final equipment = EquipmentItem(
         id: '',
         name: _nameController.text.trim(),
         type: _selectedType,
@@ -375,19 +380,19 @@ class _AddGearSheetState extends ConsumerState<AddGearSheet> {
         isActive: true,
       );
 
-      await widget.ref.read(gearListNotifierProvider.notifier).addGear(gear);
+      await widget.ref.read(equipmentListNotifierProvider.notifier).addEquipment(equipment);
 
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gear added successfully')),
+          const SnackBar(content: Text('Equipment added successfully')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error adding gear: $e'),
+            content: Text('Error adding equipment: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -397,16 +402,16 @@ class _AddGearSheetState extends ConsumerState<AddGearSheet> {
   }
 }
 
-/// List item widget for displaying gear
-class GearListTile extends StatelessWidget {
+/// List item widget for displaying equipment
+class EquipmentListTile extends StatelessWidget {
   final String name;
-  final GearType type;
+  final EquipmentType type;
   final String? brandModel;
   final bool isServiceDue;
   final int? daysUntilService;
   final VoidCallback? onTap;
 
-  const GearListTile({
+  const EquipmentListTile({
     super.key,
     required this.name,
     required this.type,
@@ -454,28 +459,28 @@ class GearListTile extends StatelessWidget {
     );
   }
 
-  IconData _getIconForType(GearType type) {
+  IconData _getIconForType(EquipmentType type) {
     switch (type) {
-      case GearType.regulator:
+      case EquipmentType.regulator:
         return Icons.air;
-      case GearType.bcd:
+      case EquipmentType.bcd:
         return Icons.accessibility_new;
-      case GearType.wetsuit:
-      case GearType.drysuit:
+      case EquipmentType.wetsuit:
+      case EquipmentType.drysuit:
         return Icons.checkroom;
-      case GearType.fins:
+      case EquipmentType.fins:
         return Icons.directions_walk;
-      case GearType.mask:
+      case EquipmentType.mask:
         return Icons.visibility;
-      case GearType.computer:
+      case EquipmentType.computer:
         return Icons.watch;
-      case GearType.tank:
+      case EquipmentType.tank:
         return Icons.propane_tank;
-      case GearType.weights:
+      case EquipmentType.weights:
         return Icons.fitness_center;
-      case GearType.light:
+      case EquipmentType.light:
         return Icons.flashlight_on;
-      case GearType.camera:
+      case EquipmentType.camera:
         return Icons.camera_alt;
       default:
         return Icons.inventory_2;
@@ -483,14 +488,14 @@ class GearListTile extends StatelessWidget {
   }
 }
 
-/// Search delegate for gear
-class GearSearchDelegate extends SearchDelegate<GearItem?> {
+/// Search delegate for equipment
+class EquipmentSearchDelegate extends SearchDelegate<EquipmentItem?> {
   final WidgetRef ref;
 
-  GearSearchDelegate(this.ref);
+  EquipmentSearchDelegate(this.ref);
 
   @override
-  String get searchFieldLabel => 'Search gear...';
+  String get searchFieldLabel => 'Search equipment...';
 
   @override
   List<Widget> buildActions(BuildContext context) {
@@ -543,11 +548,11 @@ class GearSearchDelegate extends SearchDelegate<GearItem?> {
   }
 
   Widget _buildSearchResults(BuildContext context) {
-    final searchAsync = ref.watch(gearSearchProvider(query));
+    final searchAsync = ref.watch(equipmentSearchProvider(query));
 
     return searchAsync.when(
-      data: (gear) {
-        if (gear.isEmpty) {
+      data: (equipment) {
+        if (equipment.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -559,7 +564,7 @@ class GearSearchDelegate extends SearchDelegate<GearItem?> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'No gear found for "$query"',
+                  'No equipment found for "$query"',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -570,10 +575,10 @@ class GearSearchDelegate extends SearchDelegate<GearItem?> {
         }
 
         return ListView.builder(
-          itemCount: gear.length,
+          itemCount: equipment.length,
           itemBuilder: (context, index) {
-            final item = gear[index];
-            return GearListTile(
+            final item = equipment[index];
+            return EquipmentListTile(
               name: item.name,
               type: item.type,
               brandModel: item.fullName != item.name ? item.fullName : null,
@@ -581,7 +586,7 @@ class GearSearchDelegate extends SearchDelegate<GearItem?> {
               daysUntilService: item.daysUntilService,
               onTap: () {
                 close(context, item);
-                context.push('/gear/${item.id}');
+                context.push('/equipment/${item.id}');
               },
             );
           },

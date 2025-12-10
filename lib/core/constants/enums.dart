@@ -19,8 +19,8 @@ enum DiveType {
   const DiveType(this.displayName);
 }
 
-/// Types of diving gear
-enum GearType {
+/// Types of diving equipment
+enum EquipmentType {
   regulator('Regulator'),
   bcd('BCD'),
   wetsuit('Wetsuit'),
@@ -41,7 +41,7 @@ enum GearType {
   other('Other');
 
   final String displayName;
-  const GearType(this.displayName);
+  const EquipmentType(this.displayName);
 }
 
 /// Visibility conditions

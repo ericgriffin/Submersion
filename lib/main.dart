@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
 import 'core/services/database_service.dart';
+import 'features/marine_life/data/repositories/species_repository.dart';
 import 'features/settings/presentation/providers/settings_providers.dart';
 
 Future<void> main() async {
@@ -11,6 +12,10 @@ Future<void> main() async {
 
   // Initialize database
   await DatabaseService.instance.initialize();
+
+  // Seed common species data
+  final speciesRepository = SpeciesRepository();
+  await speciesRepository.seedCommonSpecies();
 
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();

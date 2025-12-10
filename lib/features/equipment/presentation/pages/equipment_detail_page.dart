@@ -4,30 +4,30 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/enums.dart';
-import '../../domain/entities/gear_item.dart';
-import '../providers/gear_providers.dart';
+import '../../domain/entities/equipment_item.dart';
+import '../providers/equipment_providers.dart';
 
-class GearDetailPage extends ConsumerWidget {
-  final String gearId;
+class EquipmentDetailPage extends ConsumerWidget {
+  final String equipmentId;
 
-  const GearDetailPage({
+  const EquipmentDetailPage({
     super.key,
-    required this.gearId,
+    required this.equipmentId,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final gearAsync = ref.watch(gearItemProvider(gearId));
+    final equipmentAsync = ref.watch(equipmentItemProvider(equipmentId));
 
-    return gearAsync.when(
-      data: (gear) {
-        if (gear == null) {
+    return equipmentAsync.when(
+      data: (equipment) {
+        if (equipment == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Gear Not Found')),
-            body: const Center(child: Text('This gear item no longer exists.')),
+            appBar: AppBar(title: const Text('Equipment Not Found')),
+            body: const Center(child: Text('This equipment item no longer exists.')),
           );
         }
-        return _buildContent(context, ref, gear);
+        return _buildContent(context, ref, equipment);
       },
       loading: () => Scaffold(
         appBar: AppBar(title: const Text('Loading...')),
@@ -40,19 +40,19 @@ class GearDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, GearItem gear) {
+  Widget _buildContent(BuildContext context, WidgetRef ref, EquipmentItem equipment) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(gear.name),
+        title: Text(equipment.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () => context.push('/gear/$gearId/edit'),
+            onPressed: () => context.push('/equipment/$equipmentId/edit'),
           ),
           PopupMenuButton<String>(
-            onSelected: (value) => _handleMenuAction(context, ref, value, gear),
+            onSelected: (value) => _handleMenuAction(context, ref, value, equipment),
             itemBuilder: (context) => [
-              if (gear.isActive)
+              if (equipment.isActive)
                 const PopupMenuItem(
                   value: 'service',
                   child: ListTile(
@@ -62,10 +62,10 @@ class GearDetailPage extends ConsumerWidget {
                   ),
                 ),
               PopupMenuItem(
-                value: gear.isActive ? 'retire' : 'reactivate',
+                value: equipment.isActive ? 'retire' : 'reactivate',
                 child: ListTile(
-                  leading: Icon(gear.isActive ? Icons.archive : Icons.unarchive),
-                  title: Text(gear.isActive ? 'Retire Gear' : 'Reactivate'),
+                  leading: Icon(equipment.isActive ? Icons.archive : Icons.unarchive),
+                  title: Text(equipment.isActive ? 'Retire Equipment' : 'Reactivate'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -86,16 +86,16 @@ class GearDetailPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderSection(context, gear),
+            _buildHeaderSection(context, equipment),
             const SizedBox(height: 24),
-            _buildDetailsSection(context, gear),
-            if (gear.serviceIntervalDays != null) ...[
+            _buildDetailsSection(context, equipment),
+            if (equipment.serviceIntervalDays != null) ...[
               const SizedBox(height: 24),
-              _buildServiceSection(context, gear),
+              _buildServiceSection(context, equipment),
             ],
-            if (gear.notes.isNotEmpty) ...[
+            if (equipment.notes.isNotEmpty) ...[
               const SizedBox(height: 24),
-              _buildNotesSection(context, gear),
+              _buildNotesSection(context, equipment),
             ],
           ],
         ),
@@ -103,7 +103,7 @@ class GearDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeaderSection(BuildContext context, GearItem gear) {
+  Widget _buildHeaderSection(BuildContext context, EquipmentItem equipment) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -113,13 +113,13 @@ class GearDetailPage extends ConsumerWidget {
               children: [
                 CircleAvatar(
                   radius: 32,
-                  backgroundColor: gear.isServiceDue
+                  backgroundColor: equipment.isServiceDue
                       ? Theme.of(context).colorScheme.errorContainer
                       : Theme.of(context).colorScheme.tertiaryContainer,
                   child: Icon(
-                    _getIconForType(gear.type),
+                    _getIconForType(equipment.type),
                     size: 32,
-                    color: gear.isServiceDue
+                    color: equipment.isServiceDue
                         ? Theme.of(context).colorScheme.onErrorContainer
                         : Theme.of(context).colorScheme.onTertiaryContainer,
                   ),
@@ -130,16 +130,16 @@ class GearDetailPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        gear.name,
+                        equipment.name,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       Text(
-                        gear.type.displayName,
+                        equipment.type.displayName,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                       ),
-                      if (!gear.isActive)
+                      if (!equipment.isActive)
                         Chip(
                           label: const Text('Retired'),
                           backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -152,7 +152,7 @@ class GearDetailPage extends ConsumerWidget {
                 ),
               ],
             ),
-            if (gear.isServiceDue) ...[
+            if (equipment.isServiceDue) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -186,7 +186,7 @@ class GearDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailsSection(BuildContext context, GearItem gear) {
+  Widget _buildDetailsSection(BuildContext context, EquipmentItem equipment) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -198,23 +198,23 @@ class GearDetailPage extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Divider(),
-            if (gear.brand != null)
-              _buildDetailRow(context, 'Brand', gear.brand!),
-            if (gear.model != null)
-              _buildDetailRow(context, 'Model', gear.model!),
-            if (gear.serialNumber != null)
-              _buildDetailRow(context, 'Serial Number', gear.serialNumber!),
-            if (gear.purchaseDate != null)
+            if (equipment.brand != null)
+              _buildDetailRow(context, 'Brand', equipment.brand!),
+            if (equipment.model != null)
+              _buildDetailRow(context, 'Model', equipment.model!),
+            if (equipment.serialNumber != null)
+              _buildDetailRow(context, 'Serial Number', equipment.serialNumber!),
+            if (equipment.purchaseDate != null)
               _buildDetailRow(
                 context,
                 'Purchase Date',
-                DateFormat('MMM d, yyyy').format(gear.purchaseDate!),
+                DateFormat('MMM d, yyyy').format(equipment.purchaseDate!),
               ),
-            if (gear.ownershipDuration != null)
+            if (equipment.ownershipDuration != null)
               _buildDetailRow(
                 context,
                 'Owned For',
-                _formatDuration(gear.ownershipDuration!),
+                _formatDuration(equipment.ownershipDuration!),
               ),
           ],
         ),
@@ -222,8 +222,8 @@ class GearDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildServiceSection(BuildContext context, GearItem gear) {
-    final daysUntil = gear.daysUntilService;
+  Widget _buildServiceSection(BuildContext context, EquipmentItem equipment) {
+    final daysUntil = equipment.daysUntilService;
     final isOverdue = daysUntil != null && daysUntil < 0;
 
     return Card(
@@ -249,19 +249,19 @@ class GearDetailPage extends ConsumerWidget {
             _buildDetailRow(
               context,
               'Service Interval',
-              '${gear.serviceIntervalDays} days',
+              '${equipment.serviceIntervalDays} days',
             ),
-            if (gear.lastServiceDate != null)
+            if (equipment.lastServiceDate != null)
               _buildDetailRow(
                 context,
                 'Last Service',
-                DateFormat('MMM d, yyyy').format(gear.lastServiceDate!),
+                DateFormat('MMM d, yyyy').format(equipment.lastServiceDate!),
               ),
-            if (gear.nextServiceDue != null)
+            if (equipment.nextServiceDue != null)
               _buildDetailRow(
                 context,
                 'Next Service Due',
-                DateFormat('MMM d, yyyy').format(gear.nextServiceDue!),
+                DateFormat('MMM d, yyyy').format(equipment.nextServiceDue!),
               ),
             if (daysUntil != null)
               Padding(
@@ -308,7 +308,7 @@ class GearDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildNotesSection(BuildContext context, GearItem gear) {
+  Widget _buildNotesSection(BuildContext context, EquipmentItem equipment) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -331,7 +331,7 @@ class GearDetailPage extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              gear.notes,
+              equipment.notes,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
@@ -372,14 +372,14 @@ class GearDetailPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String action,
-    GearItem gear,
+    EquipmentItem equipment,
   ) async {
-    final notifier = ref.read(gearListNotifierProvider.notifier);
+    final notifier = ref.read(equipmentListNotifierProvider.notifier);
 
     switch (action) {
       case 'service':
-        await notifier.markAsServiced(gearId);
-        ref.invalidate(gearItemProvider(gearId));
+        await notifier.markAsServiced(equipmentId);
+        ref.invalidate(equipmentItemProvider(equipmentId));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Marked as serviced')),
@@ -388,21 +388,21 @@ class GearDetailPage extends ConsumerWidget {
         break;
 
       case 'retire':
-        await notifier.retireGear(gearId);
-        ref.invalidate(gearItemProvider(gearId));
+        await notifier.retireEquipment(equipmentId);
+        ref.invalidate(equipmentItemProvider(equipmentId));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gear retired')),
+            const SnackBar(content: Text('Equipment retired')),
           );
         }
         break;
 
       case 'reactivate':
-        await notifier.reactivateGear(gearId);
-        ref.invalidate(gearItemProvider(gearId));
+        await notifier.reactivateEquipment(equipmentId);
+        ref.invalidate(equipmentItemProvider(equipmentId));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gear reactivated')),
+            const SnackBar(content: Text('Equipment reactivated')),
           );
         }
         break;
@@ -411,9 +411,9 @@ class GearDetailPage extends ConsumerWidget {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Delete Gear'),
+            title: const Text('Delete Equipment'),
             content: const Text(
-              'Are you sure you want to delete this gear? This action cannot be undone.',
+              'Are you sure you want to delete this equipment? This action cannot be undone.',
             ),
             actions: [
               TextButton(
@@ -432,11 +432,11 @@ class GearDetailPage extends ConsumerWidget {
         );
 
         if (confirmed == true) {
-          await notifier.deleteGear(gearId);
+          await notifier.deleteEquipment(equipmentId);
           if (context.mounted) {
-            context.go('/gear');
+            context.go('/equipment');
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Gear deleted')),
+              const SnackBar(content: Text('Equipment deleted')),
             );
           }
         }
@@ -444,28 +444,28 @@ class GearDetailPage extends ConsumerWidget {
     }
   }
 
-  IconData _getIconForType(GearType type) {
+  IconData _getIconForType(EquipmentType type) {
     switch (type) {
-      case GearType.regulator:
+      case EquipmentType.regulator:
         return Icons.air;
-      case GearType.bcd:
+      case EquipmentType.bcd:
         return Icons.accessibility_new;
-      case GearType.wetsuit:
-      case GearType.drysuit:
+      case EquipmentType.wetsuit:
+      case EquipmentType.drysuit:
         return Icons.checkroom;
-      case GearType.fins:
+      case EquipmentType.fins:
         return Icons.directions_walk;
-      case GearType.mask:
+      case EquipmentType.mask:
         return Icons.visibility;
-      case GearType.computer:
+      case EquipmentType.computer:
         return Icons.watch;
-      case GearType.tank:
+      case EquipmentType.tank:
         return Icons.propane_tank;
-      case GearType.weights:
+      case EquipmentType.weights:
         return Icons.fitness_center;
-      case GearType.light:
+      case EquipmentType.light:
         return Icons.flashlight_on;
-      case GearType.camera:
+      case EquipmentType.camera:
         return Icons.camera_alt;
       default:
         return Icons.inventory_2;

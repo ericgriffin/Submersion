@@ -3,21 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/enums.dart';
-import '../../domain/entities/gear_item.dart';
-import '../providers/gear_providers.dart';
+import '../../domain/entities/equipment_item.dart';
+import '../providers/equipment_providers.dart';
 
-class GearEditPage extends ConsumerStatefulWidget {
-  final String? gearId;
+class EquipmentEditPage extends ConsumerStatefulWidget {
+  final String? equipmentId;
 
-  const GearEditPage({super.key, this.gearId});
+  const EquipmentEditPage({super.key, this.equipmentId});
 
-  bool get isEditing => gearId != null;
+  bool get isEditing => equipmentId != null;
 
   @override
-  ConsumerState<GearEditPage> createState() => _GearEditPageState();
+  ConsumerState<EquipmentEditPage> createState() => _EquipmentEditPageState();
 }
 
-class _GearEditPageState extends ConsumerState<GearEditPage> {
+class _EquipmentEditPageState extends ConsumerState<EquipmentEditPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
@@ -26,7 +26,7 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
   final _serviceIntervalController = TextEditingController();
   final _notesController = TextEditingController();
 
-  GearType _selectedType = GearType.regulator;
+  EquipmentType _selectedType = EquipmentType.regulator;
   DateTime? _purchaseDate;
   DateTime? _lastServiceDate;
   bool _isLoading = false;
@@ -43,35 +43,35 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
     super.dispose();
   }
 
-  void _initializeFromGear(GearItem gear) {
+  void _initializeFromEquipment(EquipmentItem equipment) {
     if (_isInitialized) return;
     _isInitialized = true;
 
-    _nameController.text = gear.name;
-    _brandController.text = gear.brand ?? '';
-    _modelController.text = gear.model ?? '';
-    _serialController.text = gear.serialNumber ?? '';
-    _serviceIntervalController.text = gear.serviceIntervalDays?.toString() ?? '';
-    _notesController.text = gear.notes;
-    _selectedType = gear.type;
-    _purchaseDate = gear.purchaseDate;
-    _lastServiceDate = gear.lastServiceDate;
+    _nameController.text = equipment.name;
+    _brandController.text = equipment.brand ?? '';
+    _modelController.text = equipment.model ?? '';
+    _serialController.text = equipment.serialNumber ?? '';
+    _serviceIntervalController.text = equipment.serviceIntervalDays?.toString() ?? '';
+    _notesController.text = equipment.notes;
+    _selectedType = equipment.type;
+    _purchaseDate = equipment.purchaseDate;
+    _lastServiceDate = equipment.lastServiceDate;
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.isEditing) {
-      final gearAsync = ref.watch(gearItemProvider(widget.gearId!));
-      return gearAsync.when(
-        data: (gear) {
-          if (gear == null) {
+      final equipmentAsync = ref.watch(equipmentItemProvider(widget.equipmentId!));
+      return equipmentAsync.when(
+        data: (equipment) {
+          if (equipment == null) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Gear Not Found')),
-              body: const Center(child: Text('This gear item no longer exists.')),
+              appBar: AppBar(title: const Text('Equipment Not Found')),
+              body: const Center(child: Text('This equipment item no longer exists.')),
             );
           }
-          _initializeFromGear(gear);
-          return _buildForm(context, gear);
+          _initializeFromEquipment(equipment);
+          return _buildForm(context, equipment);
         },
         loading: () => Scaffold(
           appBar: AppBar(title: const Text('Loading...')),
@@ -87,10 +87,10 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
     return _buildForm(context, null);
   }
 
-  Widget _buildForm(BuildContext context, GearItem? existingGear) {
+  Widget _buildForm(BuildContext context, EquipmentItem? existingEquipment) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Gear' : 'New Gear'),
+        title: Text(widget.isEditing ? 'Edit Equipment' : 'New Equipment'),
       ),
       body: Form(
         key: _formKey,
@@ -98,13 +98,13 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
           padding: const EdgeInsets.all(16),
           children: [
             // Type
-            DropdownButtonFormField<GearType>(
+            DropdownButtonFormField<EquipmentType>(
               value: _selectedType,
               decoration: const InputDecoration(
                 labelText: 'Type *',
                 prefixIcon: Icon(Icons.category),
               ),
-              items: GearType.values.map((type) {
+              items: EquipmentType.values.map((type) {
                 return DropdownMenuItem(
                   value: type,
                   child: Text(type.displayName),
@@ -185,7 +185,7 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
               decoration: const InputDecoration(
                 labelText: 'Notes',
                 prefixIcon: Icon(Icons.notes),
-                hintText: 'Additional notes about this gear...',
+                hintText: 'Additional notes about this equipment...',
               ),
               maxLines: 3,
             ),
@@ -193,14 +193,14 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
 
             // Save Button
             FilledButton(
-              onPressed: _isLoading ? null : () => _saveGear(existingGear),
+              onPressed: _isLoading ? null : () => _saveEquipment(existingEquipment),
               child: _isLoading
                   ? const SizedBox(
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(widget.isEditing ? 'Save Changes' : 'Add Gear'),
+                  : Text(widget.isEditing ? 'Save Changes' : 'Add Equipment'),
             ),
           ],
         ),
@@ -319,14 +319,14 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
     }
   }
 
-  Future<void> _saveGear(GearItem? existingGear) async {
+  Future<void> _saveEquipment(EquipmentItem? existingEquipment) async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final gear = GearItem(
-        id: widget.gearId ?? '',
+      final equipment = EquipmentItem(
+        id: widget.equipmentId ?? '',
         name: _nameController.text.trim(),
         type: _selectedType,
         brand: _brandController.text.trim().isEmpty ? null : _brandController.text.trim(),
@@ -338,23 +338,23 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
             ? int.tryParse(_serviceIntervalController.text)
             : null,
         notes: _notesController.text.trim(),
-        isActive: existingGear?.isActive ?? true,
+        isActive: existingEquipment?.isActive ?? true,
       );
 
-      final notifier = ref.read(gearListNotifierProvider.notifier);
+      final notifier = ref.read(equipmentListNotifierProvider.notifier);
 
       if (widget.isEditing) {
-        await notifier.updateGear(gear);
-        ref.invalidate(gearItemProvider(widget.gearId!));
+        await notifier.updateEquipment(equipment);
+        ref.invalidate(equipmentItemProvider(widget.equipmentId!));
       } else {
-        await notifier.addGear(gear);
+        await notifier.addEquipment(equipment);
       }
 
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isEditing ? 'Gear updated' : 'Gear added'),
+            content: Text(widget.isEditing ? 'Equipment updated' : 'Equipment added'),
           ),
         );
       }
@@ -362,7 +362,7 @@ class _GearEditPageState extends ConsumerState<GearEditPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error saving gear: $e'),
+            content: Text('Error saving equipment: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

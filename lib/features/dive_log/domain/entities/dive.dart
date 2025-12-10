@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../core/constants/enums.dart';
 import '../../../dive_sites/domain/entities/dive_site.dart';
-import '../../../gear/domain/entities/gear_item.dart';
+import '../../../equipment/domain/entities/equipment_item.dart';
 
 /// Core dive log entry entity
 class Dive extends Equatable {
@@ -15,7 +15,7 @@ class Dive extends Equatable {
   final DiveSite? site;
   final List<DiveTank> tanks;
   final List<DiveProfilePoint> profile;
-  final List<GearItem> gear;
+  final List<EquipmentItem> equipment;
   final String notes;
   final List<String> photoIds;
   final List<MarineSighting> sightings;
@@ -37,7 +37,7 @@ class Dive extends Equatable {
     this.site,
     this.tanks = const [],
     this.profile = const [],
-    this.gear = const [],
+    this.equipment = const [],
     this.notes = '',
     this.photoIds = const [],
     this.sightings = const [],
@@ -73,7 +73,7 @@ class Dive extends Equatable {
     DiveSite? site,
     List<DiveTank>? tanks,
     List<DiveProfilePoint>? profile,
-    List<GearItem>? gear,
+    List<EquipmentItem>? equipment,
     String? notes,
     List<String>? photoIds,
     List<MarineSighting>? sightings,
@@ -95,7 +95,7 @@ class Dive extends Equatable {
       site: site ?? this.site,
       tanks: tanks ?? this.tanks,
       profile: profile ?? this.profile,
-      gear: gear ?? this.gear,
+      equipment: equipment ?? this.equipment,
       notes: notes ?? this.notes,
       photoIds: photoIds ?? this.photoIds,
       sightings: sightings ?? this.sightings,
@@ -120,7 +120,7 @@ class Dive extends Equatable {
         site,
         tanks,
         profile,
-        gear,
+        equipment,
         notes,
         photoIds,
         sightings,
